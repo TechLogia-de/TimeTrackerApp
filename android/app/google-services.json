@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "756953631901",
+    "firebase_url": "https://timetrackerv100-default-rtdb.europe-west1.firebasedatabase.app",
+    "project_id": "timetrackerv100",
+    "storage_bucket": "timetrackerv100.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:756953631901:android:8cd8999506aeb156c05874",
+        "android_client_info": {
+          "package_name": "com.example.test_1"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAoiQnd7uRzmM5q724XjRBAAy4J3ke9eAg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

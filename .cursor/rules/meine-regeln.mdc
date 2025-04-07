@@ -1,0 +1,59 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+---
+description: >
+  Sicherheits- und Qualitätsrichtlinien für Cursor AI: Diese Regeln stellen sicher, dass die Flutter-App höchsten Anforderungen an Sicherheit, Stabilität und Benutzerfreundlichkeit entspricht. 
+  Sie decken Schutzmechanismen gegen Hacking-Versuche, unsichere Netzwerkkommunikation, fehlerhafte Datenverarbeitung und unzureichende Konfigurationspraktiken ab. 
+  Zusätzlich werden Best Practices zur Barrierefreiheit, Performance-Optimierung und Plattformkonformität (iOS/Android) berücksichtigt.
+
+  Wichtige Schwerpunkte:
+  - Sicherer Umgang mit Benutzerdaten (Datenschutz nach DSGVO und anderen Standards)
+  - Absicherung aller Netzwerkzugriffe (HTTPS, Zertifikats-Pinning, sichere API-Tokens)
+  - Absicherung der App-Konfigurationen (keine geheimen Schlüssel im Code, sichere Firebase-/API-Setups)
+  - Richtlinien zur Benutzerfreundlichkeit (Responsives Design, barrierefreie Komponenten, sinnvolle Lade- und Fehlerzustände)
+  - Schutz vor Reverse Engineering (Obfuscation, Build-Signaturen, Anti-Tampering)
+  - Stabilitätsprüfungen (Crash-Logging, Null-Safety, Fehlerbehandlung bei Netzwerk-Timeouts)
+  - Sichere Kommunikation mit nativen Modulen (z. B. über Method Channels)
+  - Regelmäßige Sicherheits-Scans und Linter-Checks
+  - Plattformrichtlinien für App Stores (z. B. Datenschutzdialoge, Berechtigungsabfragen mit Kontext)
+  - Konsistentes Logging (ohne personenbezogene Daten)
+
+globs:
+  - "**/*.dart"
+  - "lib/**"
+  - "android/**"
+  - "ios/**"
+  - "pubspec.yaml"
+  - "assets/**"
+
+alwaysApply: true
+---
+
+
+
+
+Thema
+ErklÃ¤rung
+ðŸ” Reverse Engineering Schutz
+Dart-Code-Obfuscation, ProGuard (Android), App Signing â€“ hilft, deine App zu schÃ¼tzen, wenn sie Ã¶ffentlich ist.
+ðŸŒ Netzwerk-Sicherheit
+Verwende HTTPS, keine HTTP-Calls; Ã¼berlege dir TLS-Pinning mit Paketen wie http_cert_pinning.
+ðŸ”‘ Secrets Management
+API-Tokens gehÃ¶ren nicht in den Code! Nutze z.â€¯B. .env-Ã¤hnliche LÃ¶sungen oder sichere Remote-Configs.
+ðŸ“± Berechtigungsabfragen mit Kontext
+Nutzer fragen warum du Zugriff auf Kamera, Mikrofon etc. willst â€“ sonst gibtâ€™s App-Store-Probleme.
+ðŸ¦º Fehlerfreundliche UX
+Nutzer brauchen klare Hinweise bei fehlendem Internet, Backendfehlern, Timeouts usw.
+â™¿ Barrierefreiheit
+Alle Buttons und Widgets sollten beschreibbar fÃ¼r Screenreader sein (z.â€¯B. mit Semantics).
+âš ï¸ Datenschutz und DSGVO
+Zeige DatenschutzerklÃ¤rung an, frage Nutzer bei App-Start ggf. nach Einwilligung (z.â€¯B. Analytics).
+ðŸ“¦ App-GrÃ¶ÃŸe optimieren
+UnnÃ¶tige Assets rausschmeiÃŸen, Split-Builds fÃ¼r Android (ARM64 / x86), flutter build appbundle statt APK.
+ðŸš¨ Crash Reporting
+Tools wie Sentry, Firebase Crashlytics integrieren â€“ zur frÃ¼hzeitigen Fehlererkennung.
+ðŸ“Š Performance-Monitoring
+Du kannst dart:developer oder Firebase Performance Monitoring nutzen, um Ladezeiten und Jank zu messen.
