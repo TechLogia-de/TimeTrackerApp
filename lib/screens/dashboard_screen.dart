@@ -762,7 +762,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
                   ),
                   const SizedBox(height: 16),
                   Expanded(
-                    child: _weekHours.isEmpty
+                    child: _weekHours.isEmpty || _weekHours.every((hour) => hour == 0)
                       ? Center(child: Text('Keine Daten verfügbar'))
                       : BarChart(
                           BarChartData(
@@ -780,10 +780,14 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
                                 sideTitles: SideTitles(
                                   showTitles: true,
                                   getTitlesWidget: (value, meta) {
+                                    final index = value.toInt();
+                                    if (index < 0 || index >= _weekLabels.length) {
+                                      return const SizedBox(); // Leeres Widget für ungültige Indizes
+                                    }
                                     return Padding(
                                       padding: const EdgeInsets.only(top: 8.0),
                                       child: Text(
-                                        _weekLabels[value.toInt()],
+                                        _weekLabels[index],
                                         style: TextStyle(
                                           fontSize: 12,
                                           color: theme.colorScheme.onSurface.withOpacity(0.6),
@@ -819,7 +823,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
                                     ),
                                     backDrawRodData: BackgroundBarChartRodData(
                                       show: true,
-                                      toY: _weekHours.reduce((a, b) => math.max(a, b)),
+                                      toY: _getMaxChartValue(),
                                       color: theme.colorScheme.primary.withOpacity(0.1),
                                     ),
                                   ),
@@ -1063,7 +1067,9 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
       // Überprüfe, ob der Eintrag aus dieser Woche ist
       if (startOfEntryWeek.isAtSameMomentAs(startOfWeek)) {
         final weekday = entry.date.weekday - 1; // 0 für Montag, 6 für Sonntag
-        _weekHours[weekday] += entry.duration / 3600; // Sekunden in Stunden umrechnen
+        if (weekday >= 0 && weekday < 7) { // Sicherheitscheck für gültigen Index
+          _weekHours[weekday] += entry.duration / 3600; // Sekunden in Stunden umrechnen
+        }
       }
     }
   }
@@ -1117,6 +1123,22 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
         'count': projectIds.length,
       }
     };
+  }
+
+  // Sichere Methode, um den maximalen Wert für das Diagramm zu ermitteln
+  double _getMaxChartValue() {
+    if (_weekHours.isEmpty) {
+      return 1.0; // Standardwert, wenn keine Daten vorhanden sind
+    }
+    
+    try {
+      final max = _weekHours.reduce((a, b) => math.max(a, b));
+      // Wenn max 0 oder NaN ist, gib einen sicheren Wert zurück
+      return max <= 0 || max.isNaN ? 1.0 : max;
+    } catch (e) {
+      // Fallback bei Fehlern
+      return 1.0;
+    }
   }
 
   // Dashboard-Daten laden
