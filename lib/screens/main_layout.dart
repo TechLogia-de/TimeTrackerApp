@@ -236,35 +236,52 @@ class MainLayoutState extends State<MainLayout> with SingleTickerProviderStateMi
     // Verzögere die Anfrage leicht, damit die App vollständig geladen werden kann
     await Future.delayed(const Duration(seconds: 1));
     
-    // Frage die Berechtigung an, wenn sie noch nicht zuvor erteilt wurde
-    final permissionGranted = await settingsService.checkNotificationPermission();
-    if (!permissionGranted) {
+    // Prüfe, ob der Benutzer bereits aufgefordert wurde
+    final shouldPrompt = await settingsService.shouldPromptForNotifications();
+    
+    if (shouldPrompt && mounted) {
       // Zeige einen Dialog, der erklärt, warum wir Benachrichtigungen benötigen
-      if (mounted) {
-        final result = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Benachrichtigungen erlauben'),
-            content: const Text(
-              'Die TimeTrackerApp möchte Ihnen Benachrichtigungen senden, um Sie über laufende Timer und wichtige Erinnerungen zu informieren.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Später'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Erlauben'),
-              ),
-            ],
+      final result = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false, // Benutzer muss eine Option auswählen
+        builder: (context) => AlertDialog(
+          title: const Text('Benachrichtigungen erlauben'),
+          content: const Text(
+            'Die TimeTrackerApp möchte Ihnen Benachrichtigungen senden, um Sie über laufende Timer und wichtige Erinnerungen zu informieren.',
           ),
-        );
-        
-        if (result == true) {
-          await settingsService.requestNotificationPermission();
-        }
-      }
+          actions: [
+            TextButton(
+              onPressed: () async {
+                // Als abgelehnt markieren, aber trotzdem als "gefragt" speichern
+                await settingsService.setNotificationsPrompted(true);
+                await settingsService.setNotificationsEnabled(false);
+                Navigator.of(context).pop(false);
+              },
+              child: const Text('Ablehnen'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                Navigator.of(context).pop(true);
+                final granted = await settingsService.requestNotificationPermission();
+                
+                // Benachrichtigungsstatus in Einstellungen aktualisieren
+                await settingsService.setNotificationsEnabled(granted);
+                
+                if (mounted && granted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Benachrichtigungen wurden aktiviert'),
+                      backgroundColor: Colors.green,
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                }
+              },
+              child: const Text('Erlauben'),
+            ),
+          ],
+        ),
+      );
     }
   }
   

@@ -16,13 +16,15 @@ class SettingsService {
   static const String _accentColorKey = 'accent_color';
   static const String _languageKey = 'app_language';
   static const String _notificationsEnabledKey = 'notifications_enabled';
+  static const String _notificationsPromptedKey = 'notifications_prompted'; // Neuer Schlüssel für Benachrichtigungsaufforderung
   static const String _darkModeKey = 'dark_mode';
   
   // Standardwerte
   static const int _defaultThemeColorValue = 0xFF6200EE; // Deep Purple
   static const int _defaultAccentColorValue = 0xFFBB86FC; // Light Purple
   static const String _defaultLanguage = 'de'; // Deutsch
-  static const bool _defaultNotificationsEnabled = true;
+  static const bool _defaultNotificationsEnabled = false; // Standardmäßig deaktiviert
+  static const bool _defaultNotificationsPrompted = false; // Standardmäßig noch nicht abgefragt
   static const String _defaultDarkMode = 'system'; // System, light, dark
   
   // Für GUI-Anzeige
@@ -51,6 +53,7 @@ class SettingsService {
   Color? _accentColor;
   String? _language;
   bool? _notificationsEnabled;
+  bool? _notificationsPrompted; // Wurde der Benutzer bereits zu Benachrichtigungen aufgefordert
   String? _darkMode;
   
   // Shared Preferences Instance
@@ -78,6 +81,7 @@ class SettingsService {
     _accentColor = Color(accentColorValue);
     _language = _prefs.getString(_languageKey) ?? _defaultLanguage;
     _notificationsEnabled = _prefs.getBool(_notificationsEnabledKey) ?? _defaultNotificationsEnabled;
+    _notificationsPrompted = _prefs.getBool(_notificationsPromptedKey) ?? _defaultNotificationsPrompted;
     _darkMode = _prefs.getString(_darkModeKey) ?? _defaultDarkMode;
     
     // Initialisiere Benachrichtigungen
@@ -89,6 +93,7 @@ class SettingsService {
   Color get accentColor => _accentColor ?? Color(_defaultAccentColorValue);
   String get language => _language ?? _defaultLanguage;
   bool get notificationsEnabled => _notificationsEnabled ?? _defaultNotificationsEnabled;
+  bool get notificationsPrompted => _notificationsPrompted ?? _defaultNotificationsPrompted;
   String get darkMode => _darkMode ?? _defaultDarkMode;
   
   // Setter mit Speichern in SharedPreferences
@@ -112,6 +117,11 @@ class SettingsService {
     _notificationsEnabled = enabled;
   }
   
+  Future<void> setNotificationsPrompted(bool prompted) async {
+    await _prefs.setBool(_notificationsPromptedKey, prompted);
+    _notificationsPrompted = prompted;
+  }
+  
   Future<void> setDarkMode(String mode) async {
     await _prefs.setString(_darkModeKey, mode);
     _darkMode = mode;
@@ -123,12 +133,14 @@ class SettingsService {
     await _prefs.remove(_accentColorKey);
     await _prefs.remove(_languageKey);
     await _prefs.remove(_notificationsEnabledKey);
+    await _prefs.remove(_notificationsPromptedKey);
     await _prefs.remove(_darkModeKey);
     
     _themeColor = Color(_defaultThemeColorValue);
     _accentColor = Color(_defaultAccentColorValue);
     _language = _defaultLanguage;
     _notificationsEnabled = _defaultNotificationsEnabled;
+    _notificationsPrompted = _defaultNotificationsPrompted;
     _darkMode = _defaultDarkMode;
   }
   
@@ -163,6 +175,9 @@ class SettingsService {
       // Speichere den Status in den Einstellungen
       await setNotificationsEnabled(status.isGranted);
       
+      // Markiere, dass der Benutzer bereits aufgefordert wurde
+      await setNotificationsPrompted(true);
+      
       // Bei iOS müssen wir auch die Berechtigungen in den Benachrichtigungseinstellungen anfordern
       if (status.isGranted) {
         await flutterLocalNotificationsPlugin
@@ -178,6 +193,25 @@ class SettingsService {
     }
     
     // Die Berechtigung wurde bereits erteilt
+    await setNotificationsPrompted(true);
+    return true;
+  }
+  
+  // Prüft, ob der Benutzer bereits zur Benachrichtigungsberechtigung aufgefordert wurde
+  Future<bool> shouldPromptForNotifications() async {
+    // Wenn bereits aufgefordert wurde, nicht erneut fragen
+    if (notificationsPrompted) {
+      return false;
+    }
+    
+    // Wenn bereits Berechtigungen vorhanden sind, als aufgefordert markieren
+    if (await Permission.notification.isGranted) {
+      await setNotificationsPrompted(true);
+      await setNotificationsEnabled(true);
+      return false;
+    }
+    
+    // Noch nicht aufgefordert, also sollte gefragt werden
     return true;
   }
   
