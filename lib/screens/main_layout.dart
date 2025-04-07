@@ -13,6 +13,7 @@ import 'time/time_screen.dart';
 import 'orders_screen.dart';
 import 'profile_screen.dart';
 import 'dashboard_screen.dart';
+import 'settings_screen.dart';
 import '../main.dart';
 
 class MainLayout extends StatefulWidget {
@@ -327,6 +328,131 @@ class MainLayoutState extends State<MainLayout> with SingleTickerProviderStateMi
             ..._getActions(),
           ],
         ),
+        drawer: Drawer(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              DrawerHeader(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CircleAvatar(
+                      radius: 30,
+                      backgroundColor: Colors.white,
+                      child: Text(
+                        widget.user.displayName?.substring(0, 1).toUpperCase() ?? 'U',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 24,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      widget.user.displayName ?? 'Benutzer',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      widget.user.email ?? '',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.dashboard),
+                title: const Text('Dashboard'),
+                onTap: () {
+                  Navigator.pop(context); // Drawer schließen
+                  _onTabTapped(0);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.timer),
+                title: const Text('Zeiterfassung'),
+                onTap: () {
+                  Navigator.pop(context); // Drawer schließen
+                  _onTabTapped(1);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.work),
+                title: const Text('Aufträge'),
+                onTap: () {
+                  Navigator.pop(context); // Drawer schließen
+                  _onTabTapped(2);
+                },
+              ),
+              const Divider(),
+              // Zeige Admin-Funktionen nur für bestimmte Email-Domänen
+              if (_isAdmin())
+                ListTile(
+                  leading: const Icon(Icons.approval),
+                  title: const Text('Zeitgenehmigung'),
+                  onTap: () {
+                    Navigator.pop(context); // Drawer schließen
+                    GoRouter.of(context).go('/admin/time_approval');
+                  },
+                ),
+              ListTile(
+                leading: const Icon(Icons.settings),
+                title: const Text('Einstellungen'),
+                onTap: () {
+                  Navigator.pop(context); // Drawer schließen
+                  Navigator.push(
+                    context, 
+                    MaterialPageRoute(
+                      builder: (context) => SettingsScreen(user: widget.user),
+                    ),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.logout),
+                title: const Text('Abmelden'),
+                onTap: () async {
+                  // Drawer schließen
+                  Navigator.pop(context);
+                  
+                  // Dialog anzeigen
+                  final shouldLogout = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Abmelden'),
+                      content: const Text('Möchten Sie sich wirklich abmelden?'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Abbrechen'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('Abmelden'),
+                        ),
+                      ],
+                    ),
+                  );
+                  
+                  // Wenn der Benutzer sich abmelden möchte
+                  if (shouldLogout == true) {
+                    await _authService.signOut();
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
         body: PageView(
           controller: _pageController,
           physics: const NeverScrollableScrollPhysics(), // Deaktiviert Wischen
@@ -383,5 +509,19 @@ class MainLayoutState extends State<MainLayout> with SingleTickerProviderStateMi
       default:
         return [];
     }
+  }
+  
+  // Prüft, ob der aktuelle Benutzer Admin-Rechte hat
+  bool _isAdmin() {
+    // Einfache Prüfung basierend auf der E-Mail-Adresse
+    // In einer realen Anwendung würde man das über Firestore oder Firebase Auth Claims lösen
+    final email = widget.user.email;
+    if (email == null) return false;
+    
+    // Beispiel: Nur Benutzer mit E-Mails von bestimmten Domänen sind Admins
+    return email.endsWith('@example.com') || 
+           email.endsWith('@admin.com') || 
+           email.endsWith('@firma.de') ||
+           email == 'test@test.de';
   }
 } 

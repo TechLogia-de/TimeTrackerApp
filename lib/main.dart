@@ -8,6 +8,7 @@ import 'firebase_options.dart';
 import 'screens/auth_wrapper.dart';
 import 'screens/main_layout.dart';
 import 'screens/login_screen.dart';
+import 'screens/admin/time_approval_screen.dart';
 import 'services/customer_service.dart';
 import 'services/project_service.dart';
 import 'services/auth_service.dart';
@@ -118,6 +119,22 @@ final _router = GoRouter(
     GoRoute(
       path: '/login',
       builder: (context, state) => const LoginScreen(),
+    ),
+    GoRoute(
+      path: '/admin/time_approval',
+      pageBuilder: (context, state) => NoTransitionPage<void>(
+        key: state.pageKey,
+        child: Builder(
+          builder: (context) {
+            final user = authService.currentUser;
+            // Fallback zur AuthWrapper wenn kein Benutzer da ist
+            if (user == null) return AuthWrapper();
+            
+            // Der Zugriff auf den Bildschirm wird später im Bildschirm selbst geprüft
+            return const TimeApprovalScreen();
+          }
+        ),
+      ),
     ),
   ],
 );

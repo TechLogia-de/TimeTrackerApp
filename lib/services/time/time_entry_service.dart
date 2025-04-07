@@ -393,7 +393,7 @@ class TimeEntryService {
       
       // Daten für das Update vorbereiten
       final Map<String, dynamic> updateData = {
-        'status': 'completed',
+        'status': 'draft',
         'endTime': endTime,
         'duration': netDurationSeconds < 0 ? 0 : netDurationSeconds,
         'pauseMinutes': pauseMinutes,
@@ -496,7 +496,7 @@ class TimeEntryService {
         'projectId': projectId,
         'projectName': projectName,
         
-        'status': 'completed',
+        'status': 'draft',
         'timezone': 'Europe/Berlin', // Standardwert für deutsche Nutzer
         'isDST': isDST,
         'timezoneOffset': timezoneOffset,
@@ -553,9 +553,10 @@ class TimeEntryService {
         throw Exception('Zeiterfassung nicht gefunden');
       }
       
-      // Status auf "pending_approval" setzen
+      // Status auf "pending" setzen (entspricht "eingereicht" in der Webanwendung)
       await entryRef.update({
-        'status': 'pending_approval',
+        'status': 'pending',
+        'submittedAt': DateTime.now(),
         'updatedAt': DateTime.now(),
       });
       
@@ -567,6 +568,27 @@ class TimeEntryService {
     } catch (e) {
       print('Fehler beim Einreichen zur Genehmigung: $e');
       throw Exception('Fehler beim Einreichen zur Genehmigung');
+    }
+  }
+  
+  // Zeiteinträge, die zur Genehmigung anstehen, abrufen
+  Future<List<TimeEntry>> getTimeEntriesToApprove(String userId) async {
+    try {
+      // Alle Zeiteinträge mit Status "pending" abrufen
+      final QuerySnapshot snapshot = await _firestore
+          .collection('timeEntries')
+          .where('status', isEqualTo: 'pending')
+          .orderBy('updatedAt', descending: true)
+          .get();
+
+      final entries = snapshot.docs
+          .map((doc) => TimeEntry.fromFirestore(doc))
+          .toList();
+      
+      return entries;
+    } catch (e) {
+      print('Fehler beim Laden der ausstehenden Zeiteinträge: $e');
+      throw Exception('Fehler beim Laden der ausstehenden Zeiteinträge');
     }
   }
   
@@ -629,10 +651,10 @@ class TimeEntryService {
       if (projectName != null) updateData['projectName'] = projectName;
       if (note != null) updateData['note'] = note;
       
-      // Falls der Status 'pending_approval' war, zurücksetzen auf 'completed'
+      // Falls der Status 'pending' war, zurücksetzen auf 'draft'
       final currentData = entryDoc.data() as Map<String, dynamic>;
-      if (currentData['status'] == 'pending_approval') {
-        updateData['status'] = 'completed';
+      if (currentData['status'] == 'pending') {
+        updateData['status'] = 'draft';
       }
       
       // Zeiterfassung aktualisieren
@@ -646,6 +668,85 @@ class TimeEntryService {
     } catch (e) {
       print('Fehler beim Aktualisieren der Zeiterfassung: $e');
       throw Exception('Fehler beim Aktualisieren der Zeiterfassung: $e');
+    }
+  }
+
+  // Alle Zeiteinträge abrufen (für Admins und Manager)
+  Future<List<TimeEntry>> getAllTimeEntries(String userId) async {
+    try {
+      // Alle Zeiteinträge abrufen, sortiert nach Aktualisierungsdatum
+      final QuerySnapshot snapshot = await _firestore
+          .collection('timeEntries')
+          .orderBy('updatedAt', descending: true)
+          .limit(100) // Begrenzung auf die neuesten 100 Einträge
+          .get();
+
+      final entries = snapshot.docs
+          .map((doc) => TimeEntry.fromFirestore(doc))
+          .toList();
+      
+      return entries;
+    } catch (e) {
+      print('Fehler beim Laden aller Zeiteinträge: $e');
+      throw Exception('Fehler beim Laden aller Zeiteinträge');
+    }
+  }
+  
+  // Zeiterfassung genehmigen
+  Future<TimeEntry> approveTimeEntry(String entryId, String approverId) async {
+    try {
+      final DocumentReference entryRef = _firestore.collection('timeEntries').doc(entryId);
+      final entryDoc = await entryRef.get();
+      
+      if (!entryDoc.exists) {
+        throw Exception('Zeiterfassung nicht gefunden');
+      }
+      
+      // Status auf "approved" setzen
+      await entryRef.update({
+        'status': 'approved',
+        'approvedBy': approverId,
+        'approvedAt': DateTime.now(),
+        'updatedAt': DateTime.now(),
+      });
+      
+      // Cache leeren, um aktuelle Daten beim nächsten Laden zu erhalten
+      _cachedTimeEntries = [];
+      
+      // Aktualisiertes Objekt zurückgeben
+      return TimeEntry.fromFirestore(await entryRef.get());
+    } catch (e) {
+      print('Fehler bei der Genehmigung des Zeiteintrags: $e');
+      throw Exception('Fehler bei der Genehmigung des Zeiteintrags');
+    }
+  }
+  
+  // Zeiterfassung ablehnen
+  Future<TimeEntry> rejectTimeEntry(String entryId, String rejecterId) async {
+    try {
+      final DocumentReference entryRef = _firestore.collection('timeEntries').doc(entryId);
+      final entryDoc = await entryRef.get();
+      
+      if (!entryDoc.exists) {
+        throw Exception('Zeiterfassung nicht gefunden');
+      }
+      
+      // Status auf "rejected" setzen
+      await entryRef.update({
+        'status': 'rejected',
+        'rejectedBy': rejecterId,
+        'rejectedAt': DateTime.now(),
+        'updatedAt': DateTime.now(),
+      });
+      
+      // Cache leeren, um aktuelle Daten beim nächsten Laden zu erhalten
+      _cachedTimeEntries = [];
+      
+      // Aktualisiertes Objekt zurückgeben
+      return TimeEntry.fromFirestore(await entryRef.get());
+    } catch (e) {
+      print('Fehler bei der Ablehnung des Zeiteintrags: $e');
+      throw Exception('Fehler bei der Ablehnung des Zeiteintrags');
     }
   }
 } 

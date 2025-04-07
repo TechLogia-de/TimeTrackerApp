@@ -7,6 +7,7 @@ import '../../services/project_service.dart';
 import '../../services/time/time_entry_service.dart';
 import '../../models/time/time_entry_model.dart';
 import '../../widgets/dialogs/timer_dialogs.dart';
+import 'time_detail_screen.dart';
 
 class TimeScreen extends StatefulWidget {
   final User user;
@@ -2262,20 +2263,47 @@ class TimeScreenState extends State<TimeScreen> with AutomaticKeepAliveClientMix
   
   // Zeiteintragskarte
   Widget _buildTimeEntryCard(TimeEntry entry) {
+    final theme = Theme.of(context);
+    
     // Status des Zeiteintrags visualisieren
-    final bool isCompleted = entry.status == 'completed';
-    final bool isPending = entry.status == 'pending_approval';
+    final bool isDraft = entry.status == 'draft';
+    final bool isPending = entry.status == 'pending';
+    final bool isRejected = entry.status == 'rejected';
+    final bool isApproved = entry.status == 'approved';
     
     Color statusColor = Colors.green;
     String statusText = 'Abgeschlossen';
+    IconData statusIcon = Icons.check_circle_outline;
     
     if (isPending) {
       statusColor = Colors.orange;
       statusText = 'Genehmigung ausstehend';
-    } else if (!isCompleted) {
+      statusIcon = Icons.hourglass_empty;
+    } else if (isRejected) {
+      statusColor = Colors.red;
+      statusText = 'Abgelehnt';
+      statusIcon = Icons.cancel_outlined;
+    } else if (isApproved) {
+      statusColor = Colors.green;
+      statusText = 'Genehmigt';
+      statusIcon = Icons.check_circle_outline;
+    } else if (isDraft) {
       statusColor = Colors.blue;
-      statusText = entry.status == 'running' ? 'Läuft' : 'Pausiert';
+      statusText = 'Entwurf';
+      statusIcon = Icons.edit_note;
+    } else if (entry.status == 'running') {
+      statusColor = Colors.blue;
+      statusText = 'Läuft';
+      statusIcon = Icons.play_arrow;
+    } else if (entry.status == 'paused') {
+      statusColor = Colors.blue;
+      statusText = 'Pausiert';
+      statusIcon = Icons.pause;
     }
+    
+    // Prüfen, ob der Eintrag bearbeitet werden kann
+    bool canEdit = entry.status == 'draft' || entry.status == 'rejected';
+    bool canSubmit = entry.status == 'draft' || entry.status == 'rejected';
     
     return Card(
       margin: const EdgeInsets.only(bottom: 8.0),
@@ -2315,13 +2343,24 @@ class TimeScreenState extends State<TimeScreen> with AutomaticKeepAliveClientMix
                     color: statusColor.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: Text(
-                    statusText,
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: statusColor,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        statusIcon,
+                        size: 10,
+                        color: statusColor,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        statusText,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: statusColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -2348,10 +2387,96 @@ class TimeScreenState extends State<TimeScreen> with AutomaticKeepAliveClientMix
                   ),
               ],
             ),
+            onTap: () => _editTimeEntry(entry),
           ),
+          
+          // Aktionen für den Zeiteintrag
+          if (canEdit || canSubmit)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  if (canEdit)
+                    TextButton.icon(
+                      onPressed: () => _editTimeEntry(entry),
+                      icon: const Icon(Icons.edit, size: 16),
+                      label: const Text('Bearbeiten'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: theme.colorScheme.primary,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                  if (canSubmit)
+                    TextButton.icon(
+                      onPressed: () => _submitTimeEntry(entry),
+                      icon: const Icon(Icons.send, size: 16),
+                      label: const Text('Einreichen'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.blue,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                ],
+              ),
+            ),
         ],
       ),
     );
+  }
+  
+  // Zeiteintrag bearbeiten
+  Future<void> _editTimeEntry(TimeEntry entry) async {
+    // Navigiere zum Detailbildschirm
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TimeDetailScreen(timeEntry: entry),
+      ),
+    );
+    
+    // Wenn Änderungen vorgenommen wurden, aktualisiere die Liste
+    if (result == true) {
+      _loadTimeEntries();
+    }
+  }
+  
+  // Zeiteintrag zur Genehmigung einreichen
+  Future<void> _submitTimeEntry(TimeEntry entry) async {
+    try {
+      // SnackBar anzeigen, um den Benutzer über den Einreichungsprozess zu informieren
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Zeiteintrag wird eingereicht...'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+      
+      // Zur Genehmigung einreichen
+      await _timeEntryService.submitForApproval(entry.id!);
+      
+      // Erfolg anzeigen
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Zeiteintrag zur Genehmigung eingereicht'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      
+      // Daten neu laden
+      _loadTimeEntries();
+    } catch (e) {
+      // Fehler anzeigen
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Fehler beim Einreichen: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 }
 
