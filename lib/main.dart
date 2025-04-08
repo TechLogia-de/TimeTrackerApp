@@ -4,8 +4,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:easy_localization/easy_localization.dart';
 import 'firebase_options.dart';
 import 'screens/auth_wrapper.dart';
 import 'screens/main_layout.dart';
@@ -210,9 +208,6 @@ void main() async {
   try {
     WidgetsFlutterBinding.ensureInitialized();
     
-    // Initialisieren von EasyLocalization
-    await EasyLocalization.ensureInitialized();
-    
     // Firebase initialisieren
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform
@@ -229,21 +224,9 @@ void main() async {
     
     // Initialisiere das Datum-Format für die deutsche Lokalisierung
     await initializeDateFormatting('de_DE', null);
-    // Initialisiere auch die englische Lokalisierung
-    await initializeDateFormatting('en_US', null);
     
-    // Starte die App mit EasyLocalization
-    runApp(
-      EasyLocalization(
-        supportedLocales: const [
-          Locale('de'),
-          Locale('en'),
-        ],
-        path: 'assets/translations',
-        fallbackLocale: const Locale('de'),
-        child: const MyApp(),
-      ),
-    );
+    // Starte die App
+    runApp(const MyApp());
   } catch (e, stackTrace) {
     print('❌ Kritischer Fehler beim Starten der App: $e');
     print('Stacktrace: $stackTrace');
@@ -540,26 +523,10 @@ class MyApp extends StatelessWidget {
         themeMode = ThemeMode.system;
     }
     
-    // Aktuelle Sprache aus den Einstellungen
-    final currentLanguage = settingsService.language;
-    
-    // Setze die Sprache basierend auf den gespeicherten Einstellungen
-    if (context.locale.languageCode != currentLanguage) {
-      Future.microtask(() {
-        context.setLocale(Locale(currentLanguage));
-      });
-    }
-    
     return MaterialApp.router(
       title: 'TimeTrackerApp',
       debugShowCheckedModeBanner: false,
       routerConfig: _router,
-      
-      // Lokalisierung mit EasyLocalization konfigurieren
-      localizationsDelegates: context.localizationDelegates,
-      supportedLocales: context.supportedLocales,
-      locale: context.locale,
-      
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: primaryColor,
