@@ -895,29 +895,35 @@ class Order {
     print("🔍 Analysiere Status-Wert: '$value'");
     
     // Normalisiere den String für besseren Vergleich
-    final normalizedValue = value.toLowerCase().trim();
+    final normalizedValue = value.toLowerCase().trim().replaceAll('-', '').replaceAll('_', '');
     
     switch (normalizedValue) {
       case 'pending':
-      case 'warten auf genehmigung':
+      case 'wartenaufgenehmigung':
       case 'ausstehend':
+      case 'wartet':
+      case 'offen':
         print("✅ Status '$value' als OrderStatus.pending erkannt");
         return OrderStatus.pending;
         
       case 'approved':
       case 'genehmigt':
+      case 'accepted':
+      case 'akzeptiert':
         print("✅ Status '$value' als OrderStatus.approved erkannt");
         return OrderStatus.approved;
         
       case 'inprogress':
-      case 'in-progress':
-      case 'in_progress':
-      case 'in bearbeitung':
+      case 'progress':
+      case 'inbearbeitung':
+      case 'bearbeitung':
         print("✅ Status '$value' als OrderStatus.inProgress erkannt");
         return OrderStatus.inProgress;
         
       case 'completed':
       case 'abgeschlossen':
+      case 'fertig':
+      case 'done':
         print("✅ Status '$value' als OrderStatus.completed erkannt");
         return OrderStatus.completed;
         
@@ -928,8 +934,14 @@ class Order {
         
       case 'cancelled':
       case 'storniert':
+      case 'abgebrochen':
         print("✅ Status '$value' als OrderStatus.cancelled erkannt");
         return OrderStatus.cancelled;
+        
+      case 'assigned':
+      case 'zugewiesen':
+        print("✅ Status '$value' als OrderStatus.assigned erkannt");
+        return OrderStatus.assigned;
         
       case 'draft':
       case 'entwurf':
@@ -937,7 +949,33 @@ class Order {
         return OrderStatus.draft;
         
       default:
-        print("⚠️ Unbekannter Status: '$value', verwende OrderStatus.draft als Fallback");
+        print("⚠️ Unbekannter Status: '$value', versuche Teilabgleich...");
+        
+        // Prüfe, ob der String einen der bekannten Status enthält
+        if (normalizedValue.contains('pend') || normalizedValue.contains('wart') || normalizedValue.contains('ausst')) {
+          print("✅ Status enthält Teile von 'pending' - verwende OrderStatus.pending");
+          return OrderStatus.pending;
+        } else if (normalizedValue.contains('approv') || normalizedValue.contains('genehm') || normalizedValue.contains('akzept')) {
+          print("✅ Status enthält Teile von 'approved' - verwende OrderStatus.approved");
+          return OrderStatus.approved;
+        } else if (normalizedValue.contains('progress') || normalizedValue.contains('bearbeit')) {
+          print("✅ Status enthält Teile von 'inProgress' - verwende OrderStatus.inProgress");
+          return OrderStatus.inProgress;
+        } else if (normalizedValue.contains('complet') || normalizedValue.contains('abgeschl') || normalizedValue.contains('fertig') || normalizedValue.contains('done')) {
+          print("✅ Status enthält Teile von 'completed' - verwende OrderStatus.completed");
+          return OrderStatus.completed;
+        } else if (normalizedValue.contains('reject') || normalizedValue.contains('ablehn')) {
+          print("✅ Status enthält Teile von 'rejected' - verwende OrderStatus.rejected");
+          return OrderStatus.rejected;
+        } else if (normalizedValue.contains('cancel') || normalizedValue.contains('stornier') || normalizedValue.contains('abbrech')) {
+          print("✅ Status enthält Teile von 'cancelled' - verwende OrderStatus.cancelled");
+          return OrderStatus.cancelled;
+        } else if (normalizedValue.contains('assign') || normalizedValue.contains('zugewiesen')) {
+          print("✅ Status enthält Teile von 'assigned' - verwende OrderStatus.assigned");
+          return OrderStatus.assigned;
+        }
+        
+        print("⚠️ Keine Übereinstimmung gefunden, verwende OrderStatus.draft als Fallback");
         return OrderStatus.draft;
     }
   }

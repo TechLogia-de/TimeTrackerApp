@@ -98,16 +98,26 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
       await Future.delayed(Duration(milliseconds: 300));
       
       // Lade Aufträge aus dem Service
-      final orders = await _orderService.getOrders().first;
+      List<Order> orders;
+      
+      // Verwende die getFilteredOrders-Methode, wenn ein Status-Filter gesetzt ist
+      if (_statusFilter != null) {
+        print("⚙️ Verwende getFilteredOrders mit Status: $_statusFilter");
+        orders = await _orderService.getFilteredOrders(status: _statusFilter).first;
+      } else {
+        print("⚙️ Verwende getOrders ohne Filter");
+        orders = await _orderService.getOrders().first;
+      }
       
       if (mounted) {
         setState(() {
+          // Lokale Filterung für andere Filter (Kunde, Projekt, Suche)
           _filteredOrders = _filterOrders(orders);
           _isLoading = false;
         });
       }
     } catch (e) {
-      print("Fehler beim Laden der Aufträge: $e");
+      print("❌ Fehler beim Laden der Aufträge: $e");
       if (mounted) {
         setState(() {
           _isLoading = false;

@@ -79,58 +79,27 @@ class OrderService {
     fb.Query query = _ordersCollection;
     
     if (status != null) {
-      // Konvertiere den Enum-Wert in einen String für die Firestore-Abfrage
+      // Konvertiere den Enum-Wert in einen String für Debugging-Zwecke
       final statusString = status.toString().split('.').last;
-      print("Filtere nach Status: $statusString");
+      print("🔍 Suche nach Aufträgen mit Status: $statusString (${status.toString()})");
       
-      // Mögliche Status-Format-Varianten für die Abfrage
-      List<String> possibleStatusValues = [statusString];
-      
-      // Erweitere die möglichen Werte basierend auf dem Status
-      switch(status) {
-        case OrderStatus.draft:
-          possibleStatusValues.addAll(['Entwurf', 'DRAFT', 'Draft']);
-          break;
-        case OrderStatus.pending:
-          possibleStatusValues.addAll(['Ausstehend', 'PENDING', 'Pending', 'Wartet']);
-          break;
-        case OrderStatus.approved:
-          possibleStatusValues.addAll(['Genehmigt', 'APPROVED', 'Approved']);
-          break;
-        case OrderStatus.assigned:
-          possibleStatusValues.addAll(['Zugewiesen', 'ASSIGNED', 'Assigned']);
-          break;
-        case OrderStatus.inProgress:
-          possibleStatusValues.addAll(['in-progress', 'in_progress', 'inprogress', 'In Bearbeitung', 'IN_PROGRESS', 'In-Progress']);
-          break;
-        case OrderStatus.completed:
-          possibleStatusValues.addAll(['Abgeschlossen', 'COMPLETED', 'Completed']);
-          break;
-        case OrderStatus.rejected:
-          possibleStatusValues.addAll(['Abgelehnt', 'REJECTED', 'Rejected']);
-          break;
-        case OrderStatus.cancelled:
-          possibleStatusValues.addAll(['Storniert', 'CANCELLED', 'Cancelled']);
-          break;
-      }
-      
-      print("Mögliche Status-Werte für die Abfrage: $possibleStatusValues");
-      
-      // Erstelle die Abfrage für den Status mit dem ersten Wert
-      query = query.where('status', isEqualTo: possibleStatusValues.first);
+      // Bei Status-Suche verwenden wir lokale Filterung statt Firestore-Filter
+      // Dadurch vermeiden wir Probleme mit unterschiedlichen Status-String-Formaten
+      print("ℹ️ Verwende lokale Filterung für Status-Vergleich");
     }
     
-    print("Starte gefilterte Abfrage: ${status?.toString() ?? 'Alle'}");
+    print("⏳ Lade alle Aufträge und filtere dann lokal...");
     
-    // Sortierung entfernt, um keinen zusammengesetzten Index zu benötigen
-    return query.snapshots().asyncMap((snapshot) async {
+    // Wir holen alle Aufträge und filtern dann clientseitig
+    return _ordersCollection.snapshots().asyncMap((snapshot) async {
       try {
-        print("Gefilterter Snapshot erhalten mit ${snapshot.docs.length} Dokumenten");
+        print("📦 Snapshot erhalten mit ${snapshot.docs.length} Dokumenten");
         
-        // Zeige die tatsächlichen Status-Werte für Debugging-Zwecke an
+        // Debug: Zeige alle vorhandenen Status-Werte
+        print("📊 Status-Werte in der Datenbank:");
         for (var doc in snapshot.docs) {
           final data = doc.data() as Map<String, dynamic>?;
-          print("Dokument ${doc.id} - Status: ${data?['status']}");
+          print("  - Dokument ${doc.id}: Status='${data?['status']}' (${data?['status'].runtimeType})");
         }
         
         List<Order> orders = [];
@@ -144,39 +113,45 @@ class OrderService {
             // Prüfen, ob Kunden- oder Projektdaten fehlen und ggf. nachladen
             order = await _enrichOrderData(order);
             
-            // Wenn wir nach einem bestimmten Status filtern, machen wir eine zusätzliche Prüfung
-            if (status != null) {
-              // Normalisieren des Status für bessere Vergleichbarkeit
-              final String orderStatusStr = order.status.toString().toLowerCase();
-              final String filterStatusStr = status.toString().toLowerCase();
-              
-              print("Vergleiche Order-Status '$orderStatusStr' mit Filter-Status '$filterStatusStr'");
-              
-              // Wenn der Status nicht übereinstimmt, überspringen wir diesen Auftrag
-              if (!orderStatusStr.contains(filterStatusStr) && 
-                  !filterStatusStr.contains(orderStatusStr)) {
-                print("Status stimmt nicht überein - Auftrag wird übersprungen");
-                continue;
-              }
-            }
-            
+            // Füge den Auftrag zur ungefilteren Liste hinzu
             orders.add(order);
-            print("Gefilterter Auftrag erfolgreich geparst: ID ${order.id}, Status: ${order.status}");
+            print("✅ Auftrag geladen: ID=${order.id}, Status=${order.status} (${order.status.toString()})");
           } catch (e) {
             errorCount++;
-            print("Fehler beim Parsen eines gefilterten Auftrags: $e für Dokument ${doc.id}");
+            print("❌ Fehler beim Parsen eines Auftrags: $e für Dokument ${doc.id}");
           }
         }
         
         if (errorCount > 0) {
-          print("$errorCount gefilterte Aufträge konnten nicht geladen werden");
+          print("⚠️ $errorCount Aufträge konnten nicht geladen werden");
+        }
+        
+        // Lokale Filterung nach Status, wenn ein Filter angegeben wurde
+        if (status != null) {
+          final unfiltered = orders.length;
+          print("🔍 Führe lokale Filterung für Status ${status.toString()} durch (${orders.length} Aufträge vor dem Filtern)");
+          
+          orders = orders.where((order) {
+            final orderStatus = order.status;
+            
+            // Führe Status-Vergleich durch
+            final bool matches = orderStatus == status;
+            
+            // Debug-Ausgabe
+            print("  - Prüfe Auftrag ${order.id}: ${orderStatus.toString()} == ${status.toString()}? $matches");
+            
+            return matches;
+          }).toList();
+          
+          final filtered = orders.length;
+          print("🔍 Filterung abgeschlossen: $filtered von $unfiltered Aufträgen haben den Status ${status.toString()}");
         }
         
         // Debug-Ausgabe
-        print("Gefundene Aufträge: ${orders.length}, Status-Filter: ${status?.toString() ?? 'Alle'}");
+        print("✅ Ergebnis: ${orders.length} Aufträge gefunden, Status-Filter: ${status?.toString() ?? 'Alle'}");
         
-        if (orders.isEmpty) {
-          print("ACHTUNG: Keine Aufträge für Filter ${status?.toString() ?? 'Alle'} gefunden!");
+        if (orders.isEmpty && status != null) {
+          print("⚠️ ACHTUNG: Keine Aufträge mit Status ${status.toString()} gefunden!");
         }
         
         // Lokale Sortierung statt Firestore-Sortierung
@@ -184,7 +159,7 @@ class OrderService {
         
         return orders;
       } catch (e, stackTrace) {
-        print("Fehler beim Filtern der Aufträge: $e");
+        print("❌ Fehler beim Filtern der Aufträge: $e");
         print("Stacktrace: $stackTrace");
         return <Order>[];
       }
