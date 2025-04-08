@@ -9,6 +9,9 @@ import '../widgets/navigation/bottom_nav_bar.dart';
 import '../widgets/navigation/app_bar.dart';
 import '../widgets/dialogs/timer_dialogs.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'dart:async';
+import '../widgets/maps/order_map_widget.dart';
 
 class OrdersScreen extends StatefulWidget {
   final User user;
@@ -1331,495 +1334,62 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
         try {
           showDialog(
             context: btnContext,
-            builder: (dialogContext) => AlertDialog(
-              contentPadding: EdgeInsets.zero,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              content: Container(
-                width: double.maxFinite,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Header mit Titel und Status
-                    Container(
-                      padding: EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                        borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(16),
-                          topRight: Radius.circular(16),
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  order.title,
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: Theme.of(context).colorScheme.primary,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                  maxLines: 2,
-                                ),
-                              ),
-                              SizedBox(width: 8),
-                              _buildStatusBadge(order.status),
-                            ],
+            builder: (dialogContext) => Dialog(
+              backgroundColor: Colors.transparent,
+              insetPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+              child: DefaultTabController(
+                length: 3, // Zurück auf 3 Tabs (entferne Maps-Tab)
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Theme.of(dialogContext).scaffoldBackgroundColor,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Header mit Titel und Status
+                      _buildDialogHeader(dialogContext, order),
+                      
+                      // Tabs
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Theme.of(dialogContext).cardColor,
+                          border: Border(
+                            bottom: BorderSide(color: Colors.grey.withOpacity(0.2)),
                           ),
-                          SizedBox(height: 8),
-                          if (order.description.isNotEmpty)
-                            Text(
-                              order.description,
-                              style: GoogleFonts.poppins(
-                                fontSize: 14,
-                                color: Colors.grey.shade700,
-                              ),
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                        ],
-                      ),
-                    ),
-                    
-                    // Hauptinhalt (scrollbar)
-                    Flexible(
-                      child: SingleChildScrollView(
-                        padding: EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Kunden- und Projektinformationen in einer Card
-                            Card(
-                              margin: EdgeInsets.only(bottom: 16),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              child: Padding(
-                                padding: EdgeInsets.all(16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Basisinformationen',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                        color: Theme.of(context).colorScheme.primary,
-                                      ),
-                                    ),
-                                    Divider(),
-                                    
-                                    // Kundeninformationen
-                                    if (order.clientName.isNotEmpty) ...[
-                                      ListTile(
-                                        contentPadding: EdgeInsets.zero,
-                                        leading: Icon(Icons.business, color: Colors.blue),
-                                        title: Text('Kunde: ${order.clientName}'),
-                                        subtitle: order.clientContactPerson != null && order.clientContactPerson!.isNotEmpty 
-                                          ? Text('Ansprechpartner: ${order.clientContactPerson}') 
-                                          : null,
-                                      ),
-                                      if (order.clientContactEmail != null && order.clientContactEmail!.isNotEmpty ||
-                                          order.clientContactPhone != null && order.clientContactPhone!.isNotEmpty)
-                                        Padding(
-                                          padding: const EdgeInsets.only(left: 40.0),
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              if (order.clientContactEmail != null && order.clientContactEmail!.isNotEmpty)
-                                                Text('E-Mail: ${order.clientContactEmail}'),
-                                              if (order.clientContactPhone != null && order.clientContactPhone!.isNotEmpty)
-                                                Text('Telefon: ${order.clientContactPhone}'),
-                                            ],
-                                          ),
-                                        ),
-                                    ],
-                                    
-                                    SizedBox(height: 8),
-                                    
-                                    // Projektinformationen
-                                    if (order.projectName != null && order.projectName!.isNotEmpty)
-                                      ListTile(
-                                        contentPadding: EdgeInsets.zero,
-                                        leading: Icon(Icons.folder, color: Colors.amber),
-                                        title: Text('Projekt: ${order.projectName}'),
-                                        subtitle: order.projectLocation != null && order.projectLocation!.isNotEmpty 
-                                          ? Text('Standort: ${order.projectLocation}') 
-                                          : null,
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            
-                            // Zeitinformationen in einer Card
-                            Card(
-                              margin: EdgeInsets.only(bottom: 16),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              child: Padding(
-                                padding: EdgeInsets.all(16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Zeitinformationen',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                        color: Colors.green.shade700,
-                                      ),
-                                    ),
-                                    Divider(),
-                                    
-                                    ListTile(
-                                      contentPadding: EdgeInsets.zero,
-                                      leading: Icon(Icons.date_range, color: Colors.green),
-                                      title: Text('Zeitraum'),
-                                      subtitle: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          if (order.startDate != null)
-                                            Text('Start: ${_formatDateWithTime(order.startDate!)}'),
-                                          if (order.dueDate != null)
-                                            Text(
-                                              'Fällig: ${_formatDateWithTime(order.dueDate!)}',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.w500,
-                                                color: order.dueDate!.isBefore(DateTime.now())
-                                                  ? Colors.red
-                                                  : null,
-                                              ),
-                                            ),
-                                          if (order.confirmationDeadline != null)
-                                            Text(
-                                              'Bestätigung bis: ${_formatDateWithTime(order.confirmationDeadline!)}',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.w500,
-                                                color: order.confirmationDeadline!.isBefore(DateTime.now())
-                                                  ? Colors.red
-                                                  : null,
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                    
-                                    ListTile(
-                                      contentPadding: EdgeInsets.zero,
-                                      leading: Icon(Icons.access_time, color: Colors.indigo),
-                                      title: Text('Zeitaufwand'),
-                                      subtitle: RichText(
-                                        text: TextSpan(
-                                          style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color),
-                                          children: [
-                                            TextSpan(text: 'Geschätzt: '),
-                                            TextSpan(
-                                              text: '${order.estimatedHours}h',
-                                              style: TextStyle(fontWeight: FontWeight.bold),
-                                            ),
-                                            TextSpan(text: '  |  Tatsächlich: '),
-                                            TextSpan(
-                                              text: '${order.actualHours}h',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                color: order.actualHours > order.estimatedHours ? Colors.red : Colors.green,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            
-                            // Verantwortlichkeiten in einer Card mit besserer Darstellung
-                            Card(
-                              margin: EdgeInsets.only(bottom: 16),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              child: Padding(
-                                padding: EdgeInsets.all(16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Verantwortlichkeiten',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                        color: Colors.purple.shade700,
-                                      ),
-                                    ),
-                                    Divider(),
-                                    
-                                    ListTile(
-                                      contentPadding: EdgeInsets.zero,
-                                      leading: Icon(Icons.person_outline, color: Colors.grey.shade700),
-                                      title: Text('Erstellt von:'),
-                                      subtitle: Text(
-                                        '${order.createdByName}',
-                                        style: TextStyle(fontWeight: FontWeight.w500),
-                                      ),
-                                    ),
-                                    
-                                    if (order.teamLeadName != null && order.teamLeadName!.isNotEmpty)
-                                      ListTile(
-                                        contentPadding: EdgeInsets.zero,
-                                        leading: Icon(Icons.star, color: Colors.amber),
-                                        title: Text('Teamleiter:'),
-                                        subtitle: Text(
-                                          '${order.teamLeadName}',
-                                          style: TextStyle(fontWeight: FontWeight.w500),
-                                        ),
-                                      ),
-                                    
-                                    if (order.assignedToName != null && order.assignedToName!.isNotEmpty)
-                                      ListTile(
-                                        contentPadding: EdgeInsets.zero,
-                                        leading: Icon(Icons.person, color: Colors.indigo),
-                                        title: Text('Hauptverantwortlich:'),
-                                        subtitle: Text(
-                                          '${order.assignedToName}',
-                                          style: TextStyle(fontWeight: FontWeight.w500),
-                                        ),
-                                      ),
-                                    
-                                    if (order.assignedUsers != null && order.assignedUsers!.isNotEmpty) ...[
-                                      Padding(
-                                        padding: EdgeInsets.only(left: 8.0, top: 8.0, bottom: 8.0),
-                                        child: Text(
-                                          'Zugewiesene Mitarbeiter:',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w500, 
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                      ),
-                                      
-                                      Container(
-                                        padding: EdgeInsets.all(12),
-                                        decoration: BoxDecoration(
-                                          color: Colors.grey.shade100,
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: order.assignedUsers!.map((user) =>
-                                            Padding(
-                                              padding: const EdgeInsets.only(bottom: 8.0),
-                                              child: Row(
-                                                children: [
-                                                  Icon(
-                                                    user.isTeamLead 
-                                                      ? Icons.star 
-                                                      : Icons.person,
-                                                    size: 16,
-                                                    color: user.isTeamLead
-                                                      ? Colors.amber
-                                                      : Colors.indigo,
-                                                  ),
-                                                  SizedBox(width: 8),
-                                                  Expanded(
-                                                    child: RichText(
-                                                      text: TextSpan(
-                                                        style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color),
-                                                        children: [
-                                                          TextSpan(
-                                                            text: user.userName,
-                                                            style: TextStyle(fontWeight: FontWeight.w500),
-                                                          ),
-                                                          if (user.isTeamLead)
-                                                            TextSpan(
-                                                              text: ' (Teamleiter)',
-                                                              style: TextStyle(
-                                                                fontStyle: FontStyle.italic,
-                                                                color: Colors.amber.shade900,
-                                                              ),
-                                                            ),
-                                                          if (user.role != null && user.role!.isNotEmpty)
-                                                            TextSpan(
-                                                              text: ' - ${user.role}',
-                                                              style: TextStyle(
-                                                                fontSize: 12,
-                                                                color: Colors.grey.shade600,
-                                                              ),
-                                                            ),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ).toList(),
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            ),
-                            
-                            // Aufgaben in einer Card
-                            if (order.tasks.isNotEmpty)
-                              Card(
-                                margin: EdgeInsets.only(bottom: 16),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                child: Padding(
-                                  padding: EdgeInsets.all(16),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Aufgaben',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16,
-                                          color: Colors.teal.shade700,
-                                        ),
-                                      ),
-                                      Divider(),
-                                      
-                                      ...order.tasks.map((task) =>
-                                        Padding(
-                                          padding: const EdgeInsets.only(bottom: 8.0),
-                                          child: Card(
-                                            margin: EdgeInsets.zero,
-                                            color: Colors.grey.shade50,
-                                            child: Padding(
-                                              padding: EdgeInsets.all(8),
-                                              child: Row(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                children: [
-                                                  Checkbox(
-                                                    value: task.completed,
-                                                    onChanged: null,
-                                                  ),
-                                                  SizedBox(width: 8),
-                                                  Expanded(
-                                                    child: Column(
-                                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                                      children: [
-                                                        Text(
-                                                          task.title,
-                                                          style: TextStyle(
-                                                            fontWeight: FontWeight.w500,
-                                                            decoration: task.completed
-                                                              ? TextDecoration.lineThrough
-                                                              : null,
-                                                          ),
-                                                        ),
-                                                        if (task.description.isNotEmpty)
-                                                          Text(
-                                                            task.description,
-                                                            style: TextStyle(
-                                                              fontSize: 12,
-                                                              color: Colors.grey.shade700,
-                                                            ),
-                                                          ),
-                                                        SizedBox(height: 4),
-                                                        Row(
-                                                          children: [
-                                                            Icon(Icons.timer, size: 12, color: Colors.blue),
-                                                            SizedBox(width: 4),
-                                                            Text(
-                                                              '${task.actualHours}/${task.estimatedHours}h',
-                                                              style: TextStyle(
-                                                                fontSize: 12,
-                                                                color: Colors.blue,
-                                                              ),
-                                                            ),
-                                                          ],
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ).toList(),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            
-                            // Tags als Chips darstellen
-                            if (order.tags.isNotEmpty)
-                              Card(
-                                margin: EdgeInsets.only(bottom: 16),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                child: Padding(
-                                  padding: EdgeInsets.all(16),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Tags',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16,
-                                          color: Theme.of(context).colorScheme.secondary,
-                                        ),
-                                      ),
-                                      Divider(),
-                                      Wrap(
-                                        spacing: 8,
-                                        runSpacing: 8,
-                                        children: order.tags.map((tag) => 
-                                          Chip(
-                                            label: Text(tag),
-                                            backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
-                                            labelStyle: TextStyle(
-                                              color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                            ),
-                                          ),
-                                        ).toList(),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
+                        ),
+                        child: TabBar(
+                          labelColor: Theme.of(dialogContext).colorScheme.primary,
+                          unselectedLabelColor: Colors.grey,
+                          indicatorColor: Theme.of(dialogContext).colorScheme.primary,
+                          isScrollable: false, // Keine Scrollbar nötig für nur 3 Tabs
+                          tabs: [
+                            Tab(text: 'Übersicht'),
+                            Tab(text: 'Details'),
+                            Tab(text: 'Zeiterfassung'),
                           ],
                         ),
                       ),
-                    ),
-                    
-                    // Aktionsbuttons basierend auf Status mit Annehmen/Ablehnen-Optionen
-                    Container(
-                      padding: EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).cardColor,
-                        border: Border(top: BorderSide(color: Colors.grey.shade300)),
-                      ),
-                      child: Column(
-                        children: [
-                          // Status-spezifische Aktionen
-                          _buildStatusSpecificActions(context, order),
-                          
-                          SizedBox(height: 8),
-                          
-                          // Standard-Buttons
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
+                      
+                      // Tab Content
+                      Flexible(
+                        child: Container(
+                          height: MediaQuery.of(dialogContext).size.height * 0.5,
+                          child: TabBarView(
                             children: [
-                              TextButton(
-                                onPressed: () => Navigator.of(context).pop(),
-                                child: Text('Schließen'),
-                              ),
+                              _buildOverviewTab(dialogContext, order),
+                              _buildDetailsTab(dialogContext, order),
+                              _buildTimeEntriesTab(dialogContext, order),
                             ],
                           ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ],
+                      
+                      // Aktionsbereich am unteren Rand
+                      _buildActionArea(dialogContext, order),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1865,6 +1435,743 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
         ),
       );
     }
+  }
+  
+  // Dialog Header
+  Widget _buildDialogHeader(BuildContext context, Order order) {
+    return Container(
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primary,
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(16),
+          topRight: Radius.circular(16),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  order.title,
+                  style: GoogleFonts.poppins(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 2,
+                ),
+              ),
+              SizedBox(width: 8),
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  _getStatusText(order.status),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              SizedBox(width: 4),
+              IconButton(
+                icon: Icon(Icons.close, color: Colors.white),
+                onPressed: () => Navigator.of(context).pop(),
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: BoxConstraints(),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+  
+  // Übersichts-Tab
+  Widget _buildOverviewTab(BuildContext context, Order order) {
+    ThemeData theme = Theme.of(context);
+    
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Kunde & Projekt Karte
+          Card(
+            margin: EdgeInsets.only(bottom: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            elevation: 1,
+            child: Padding(
+              padding: EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Kunde & Projekt',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                  Divider(),
+                  Row(
+                    children: [
+                      Icon(Icons.business, 
+                           color: theme.colorScheme.primary.withOpacity(0.7), 
+                           size: 20),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          order.clientName.isNotEmpty ? order.clientName : 'Kein Kunde',
+                          style: TextStyle(fontSize: 15),
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(Icons.folder, 
+                           color: theme.colorScheme.secondary.withOpacity(0.7), 
+                           size: 20),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          order.projectName != null && order.projectName!.isNotEmpty 
+                            ? order.projectName! 
+                            : 'Kein Projekt',
+                          style: TextStyle(fontSize: 15),
+                        ),
+                      ),
+                    ],
+                  ),
+                  
+                  // Adresse hinzugefügt (mit Klickfunktion für Navigation)
+                  if (order.projectLocation != null && order.projectLocation!.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: InkWell(
+                        onTap: () => _openInMaps(order.projectLocation!),
+                        child: Row(
+                          children: [
+                            Icon(Icons.location_on, 
+                                color: Colors.red.withOpacity(0.7), 
+                                size: 20),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                order.projectLocation!,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  color: Colors.blue,
+                                  decoration: TextDecoration.underline,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          
+          // Status & Termine
+          Card(
+            margin: EdgeInsets.only(bottom: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            elevation: 1,
+            child: Padding(
+              padding: EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Status & Termine',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                  Divider(),
+                  
+                  // Zeitraum
+                  if (order.startDate != null || order.dueDate != null)
+                    Padding(
+                      padding: EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          Icon(Icons.calendar_today, color: Colors.indigo, size: 20),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: RichText(
+                              text: TextSpan(
+                                style: TextStyle(color: theme.textTheme.bodyLarge?.color),
+                                children: [
+                                  TextSpan(text: 'Zeitraum: '),
+                                  TextSpan(
+                                    text: order.startDate != null && order.dueDate != null
+                                      ? '${_formatDate(order.startDate!)} - ${_formatDate(order.dueDate!)}'
+                                      : order.startDate != null
+                                        ? 'Ab ${_formatDate(order.startDate!)}'
+                                        : order.dueDate != null
+                                          ? 'Bis ${_formatDate(order.dueDate!)}'
+                                          : 'Nicht definiert',
+                                    style: TextStyle(fontWeight: FontWeight.w500),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    
+                  // Fälligkeitsdatum
+                  if (order.dueDate != null)
+                    Padding(
+                      padding: EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.event, 
+                            color: order.dueDate!.isBefore(DateTime.now())
+                              ? Colors.red
+                              : Colors.green,
+                            size: 20,
+                          ),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Fällig: ${_formatDateWithTime(order.dueDate!)}',
+                              style: TextStyle(
+                                color: order.dueDate!.isBefore(DateTime.now())
+                                  ? Colors.red
+                                  : Colors.green,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    
+                  // Bestätigungsfrist
+                  if (order.confirmationDeadline != null)
+                    Padding(
+                      padding: EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.timer,
+                            color: order.confirmationDeadline!.isBefore(DateTime.now())
+                              ? Colors.red
+                              : Colors.orange,
+                            size: 20,
+                          ),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Bestätigung bis: ${_formatDateWithTime(order.confirmationDeadline!)}',
+                              style: TextStyle(
+                                color: order.confirmationDeadline!.isBefore(DateTime.now())
+                                  ? Colors.red
+                                  : Colors.orange,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  
+                  // Aufwand
+                  Padding(
+                    padding: EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        Icon(Icons.timer, color: Colors.blue, size: 20),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: RichText(
+                            text: TextSpan(
+                              style: TextStyle(color: theme.textTheme.bodyLarge?.color),
+                              children: [
+                                TextSpan(text: 'Aufwand: '),
+                                TextSpan(
+                                  text: '${order.actualHours} / ${order.estimatedHours} Stunden',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w500,
+                                    color: order.actualHours > order.estimatedHours 
+                                      ? Colors.red 
+                                      : Colors.blue,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          
+          // Verantwortlichkeiten
+          Card(
+            margin: EdgeInsets.only(bottom: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            elevation: 1,
+            child: Padding(
+              padding: EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Verantwortlichkeiten',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                  Divider(),
+                  
+                  // Erstellt von
+                  Padding(
+                    padding: EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        Icon(Icons.person_outline, color: Colors.grey, size: 20),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Erstellt von: ${order.createdByName}',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  // Teamleiter
+                  if (order.teamLeadName != null && order.teamLeadName!.isNotEmpty)
+                    Padding(
+                      padding: EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          Icon(Icons.star, color: Colors.amber, size: 20),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Teamleiter: ${order.teamLeadName}',
+                              style: TextStyle(fontWeight: FontWeight.w500),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  
+                  // Hauptverantwortlicher
+                  if (order.assignedToName != null && order.assignedToName!.isNotEmpty)
+                    Padding(
+                      padding: EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          Icon(Icons.person, color: Colors.indigo, size: 20),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Verantwortlich: ${order.assignedToName}',
+                              style: TextStyle(fontWeight: FontWeight.w500),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  // Details-Tab
+  Widget _buildDetailsTab(BuildContext context, Order order) {
+    ThemeData theme = Theme.of(context);
+    
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Beschreibung
+          Card(
+            margin: EdgeInsets.only(bottom: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            elevation: 1,
+            child: Padding(
+              padding: EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Beschreibung',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                  Divider(),
+                  Text(
+                    order.description.isNotEmpty 
+                      ? order.description 
+                      : 'Keine Beschreibung verfügbar',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          
+          // Kontaktpersonen
+          if (order.clientContactPerson != null && order.clientContactPerson!.isNotEmpty)
+            Card(
+              margin: EdgeInsets.only(bottom: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 1,
+              child: Padding(
+                padding: EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Kontaktperson',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                    Divider(),
+                    Row(
+                      children: [
+                        Icon(Icons.person, color: Colors.blue, size: 20),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(order.clientContactPerson!),
+                        ),
+                      ],
+                    ),
+                    if (order.clientContactEmail != null && order.clientContactEmail!.isNotEmpty)
+                      Padding(
+                        padding: EdgeInsets.only(top: 8, left: 28),
+                        child: Row(
+                          children: [
+                            Icon(Icons.email, color: Colors.blue, size: 16),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(order.clientContactEmail!),
+                            ),
+                          ],
+                        ),
+                      ),
+                    if (order.clientContactPhone != null && order.clientContactPhone!.isNotEmpty)
+                      Padding(
+                        padding: EdgeInsets.only(top: 8, left: 28),
+                        child: Row(
+                          children: [
+                            Icon(Icons.phone, color: Colors.blue, size: 16),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(order.clientContactPhone!),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          
+          // Aufgaben
+          if (order.tasks.isNotEmpty)
+            Card(
+              margin: EdgeInsets.only(bottom: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 1,
+              child: Padding(
+                padding: EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Aufgaben',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                    Divider(),
+                    ...order.tasks.map((task) => 
+                      Padding(
+                        padding: EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              task.completed ? Icons.check_circle : Icons.radio_button_unchecked,
+                              color: task.completed ? Colors.green : Colors.grey,
+                              size: 20,
+                            ),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    task.title,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                      decoration: task.completed ? TextDecoration.lineThrough : null,
+                                    ),
+                                  ),
+                                  if (task.description.isNotEmpty)
+                                    Text(
+                                      task.description,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ).toList(),
+                  ],
+                ),
+              ),
+            ),
+          
+          // Tags
+          if (order.tags.isNotEmpty)
+            Card(
+              margin: EdgeInsets.only(bottom: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 1,
+              child: Padding(
+                padding: EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Tags',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                    Divider(),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: order.tags.map((tag) => 
+                        Chip(
+                          label: Text(tag),
+                          backgroundColor: theme.colorScheme.surfaceVariant,
+                          labelStyle: TextStyle(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ).toList(),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+  
+  // Zeiterfassungs-Tab
+  Widget _buildTimeEntriesTab(BuildContext context, Order order) {
+    ThemeData theme = Theme.of(context);
+    
+    return order.timeEntries.isEmpty
+      ? Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.av_timer,
+                size: 64,
+                color: Colors.grey[400],
+              ),
+              SizedBox(height: 16),
+              Text(
+                'Keine Zeiteinträge vorhanden',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
+        )
+      : ListView.builder(
+          padding: EdgeInsets.all(16),
+          itemCount: order.timeEntries.length,
+          itemBuilder: (context, index) {
+            final entry = order.timeEntries[index];
+            return Card(
+              margin: EdgeInsets.only(bottom: 8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 1,
+              child: Padding(
+                padding: EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.person, color: Colors.blue, size: 16),
+                        SizedBox(width: 8),
+                        Text(
+                          entry.userName,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        Spacer(),
+                        Text(
+                          _formatDate(entry.date),
+                          style: TextStyle(
+                            color: Colors.grey[700],
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Divider(),
+                    Row(
+                      children: [
+                        Icon(Icons.timer, color: Colors.green, size: 16),
+                        SizedBox(width: 8),
+                        Text(
+                          '${entry.hours} Stunden',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w500,
+                            color: Colors.green[700],
+                          ),
+                        ),
+                        if (entry.billable)
+                          Padding(
+                            padding: EdgeInsets.only(left: 8),
+                            child: Chip(
+                              label: Text('Abrechenbar'),
+                              backgroundColor: Colors.green[50],
+                              labelStyle: TextStyle(
+                                color: Colors.green[700],
+                                fontSize: 10,
+                              ),
+                              visualDensity: VisualDensity.compact,
+                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          ),
+                      ],
+                    ),
+                    if (entry.description.isNotEmpty)
+                      Padding(
+                        padding: EdgeInsets.only(top: 8),
+                        child: Text(
+                          entry.description,
+                          style: TextStyle(
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+  }
+  
+  // Aktionsbereich am unteren Rand
+  Widget _buildActionArea(BuildContext context, Order order) {
+    return Container(
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        border: Border(
+          top: BorderSide(color: Colors.grey.withOpacity(0.2)),
+        ),
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(16),
+          bottomRight: Radius.circular(16),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Status-spezifische Aktionen
+          _buildStatusSpecificActions(context, order),
+          
+          SizedBox(height: 8),
+          
+          // Standard-Button
+          ElevatedButton.icon(
+            onPressed: () => Navigator.of(context).pop(),
+            icon: Icon(Icons.close),
+            label: Text('Schließen'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.grey[200],
+              foregroundColor: Colors.black,
+            ),
+          ),
+        ],
+      ),
+    );
   }
   
   // Neue Hilfsmethode für statusspezifische Aktionen
@@ -2617,4 +2924,14 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
   // AutomaticKeepAliveClientMixin-Implementierung
   @override
   bool get wantKeepAlive => true;
+
+  // Neuer Tab für die Karte - jetzt viel einfacher mit dem ausgelagerten Widget
+  Widget _buildMapsTab(BuildContext context, Order order) {
+    return OrderMapWidget(order: order);
+  }
+  
+  // Hilfsmethode zum Öffnen von Google Maps - nutze jetzt die statische Methode aus dem OrderMapWidget
+  Future<void> _openInMaps(String address) async {
+    await OrderMapWidget.openInMaps(address);
+  }
 } 
