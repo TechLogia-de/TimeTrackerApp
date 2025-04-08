@@ -762,77 +762,75 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
                   ),
                   const SizedBox(height: 16),
                   Expanded(
-                    child: _weekHours.isEmpty || _weekHours.every((hour) => hour == 0)
-                      ? Center(child: Text('Keine Daten verfügbar'))
-                      : BarChart(
-                          BarChartData(
-                            titlesData: FlTitlesData(
-                              leftTitles: AxisTitles(
-                                sideTitles: SideTitles(showTitles: false),
-                              ),
-                              rightTitles: AxisTitles(
-                                sideTitles: SideTitles(showTitles: false),
-                              ),
-                              topTitles: AxisTitles(
-                                sideTitles: SideTitles(showTitles: false),
-                              ),
-                              bottomTitles: AxisTitles(
-                                sideTitles: SideTitles(
-                                  showTitles: true,
-                                  getTitlesWidget: (value, meta) {
-                                    final index = value.toInt();
-                                    if (index < 0 || index >= _weekLabels.length) {
-                                      return const SizedBox(); // Leeres Widget für ungültige Indizes
-                                    }
-                                    return Padding(
-                                      padding: const EdgeInsets.only(top: 8.0),
-                                      child: Text(
-                                        _weekLabels[index],
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: theme.colorScheme.onSurface.withOpacity(0.6),
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                            ),
-                            gridData: FlGridData(
-                              show: false,
-                            ),
-                            borderData: FlBorderData(
-                              show: false,
-                            ),
-                            barGroups: List.generate(
-                              _weekHours.length,
-                              (index) => BarChartGroupData(
-                                x: index,
-                                barRods: [
-                                  BarChartRodData(
-                                    toY: _weekHours[index] * _animationController.value,
-                                    width: 20,
-                                    borderRadius: BorderRadius.circular(4),
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        theme.colorScheme.primary.withOpacity(0.7),
-                                        theme.colorScheme.primary,
-                                      ],
-                                      begin: Alignment.bottomCenter,
-                                      end: Alignment.topCenter,
-                                    ),
-                                    backDrawRodData: BackgroundBarChartRodData(
-                                      show: true,
-                                      toY: _getMaxChartValue(),
-                                      color: theme.colorScheme.primary.withOpacity(0.1),
+                    child: BarChart(
+                      BarChartData(
+                        titlesData: FlTitlesData(
+                          leftTitles: AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          rightTitles: AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          topTitles: AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          bottomTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              getTitlesWidget: (value, meta) {
+                                final index = value.toInt();
+                                if (index < 0 || index >= _weekLabels.length) {
+                                  return const SizedBox(); // Leeres Widget für ungültige Indizes
+                                }
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 8.0),
+                                  child: Text(
+                                    _weekLabels[index],
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: theme.colorScheme.onSurface.withOpacity(0.6),
                                     ),
                                   ),
-                                ],
-                              ),
+                                );
+                              },
                             ),
                           ),
-                          swapAnimationDuration: Duration(milliseconds: 800),
                         ),
+                        gridData: FlGridData(
+                          show: false,
+                        ),
+                        borderData: FlBorderData(
+                          show: false,
+                        ),
+                        barGroups: List.generate(
+                          _weekHours.length,
+                          (index) => BarChartGroupData(
+                            x: index,
+                            barRods: [
+                              BarChartRodData(
+                                toY: _weekHours[index] * _animationController.value,
+                                width: 20,
+                                borderRadius: BorderRadius.circular(4),
+                                gradient: LinearGradient(
+                                  colors: [
+                                    theme.colorScheme.primary.withOpacity(0.7),
+                                    theme.colorScheme.primary,
+                                  ],
+                                  begin: Alignment.bottomCenter,
+                                  end: Alignment.topCenter,
+                                ),
+                                backDrawRodData: BackgroundBarChartRodData(
+                                  show: true,
+                                  toY: _getMaxChartValue(),
+                                  color: theme.colorScheme.primary.withOpacity(0.1),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      swapAnimationDuration: Duration(milliseconds: 800),
+                    ),
                   ),
                 ],
               ),

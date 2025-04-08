@@ -24,6 +24,48 @@ TimeTrackerApp ist eine umfassende Lösung zur Erfassung von Arbeitszeiten, Verw
 - Implementierung von **State Management** mit Provider und GoRouter
 - Datenvisualisierung mit **FL Chart**
 
+## Verwendete Technologien und Versionen
+
+### Core
+- **Flutter SDK**: ^3.7.2
+- **Dart SDK**: ^3.7.2
+
+### UI und Design
+- **google_fonts**: ^6.2.1
+- **flutter_svg**: ^2.0.17
+- **animated_text_kit**: ^4.2.3
+- **lottie**: ^3.3.1
+- **flutter_animate**: ^4.5.2
+- **cupertino_icons**: ^1.0.8
+- **badges**: ^3.1.2
+
+### Routing und Navigation
+- **go_router**: ^14.8.1
+
+### State Management und Datenpersistenz
+- **shared_preferences**: ^2.5.3
+
+### Firebase Services
+- **firebase_core**: ^3.13.0
+- **firebase_auth**: ^5.5.2
+- **cloud_firestore**: ^5.6.6
+- **firebase_messaging**: ^15.2.5
+
+### Benachrichtigungen und Berechtigungen
+- **flutter_local_notifications**: ^19.0.0
+- **permission_handler**: ^11.4.0
+
+### Lokalisierung und Internationalisierung
+- **intl**: ^0.19.0
+- **flutter_localizations**
+- **easy_localization**: ^3.0.5
+
+### Datenvisualisierung
+- **fl_chart**: ^0.66.2
+
+### Entwicklungstools
+- **flutter_lints**: ^5.0.0
+
 ## Installation
 
 ### Voraussetzungen
