@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/settings_service.dart';
 import '../main.dart';
+import '../services/time/time_entry_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   final User user;
@@ -18,6 +19,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final SettingsService _settingsService = SettingsService();
+  final TimeEntryService _timeEntryService = TimeEntryService();
   bool _isLoading = true;
   late Color _selectedThemeColor;
   late Color _selectedAccentColor;
@@ -260,16 +262,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             if (_notificationsEnabled) ...[
               const SizedBox(height: 16),
               FilledButton.icon(
-                onPressed: () async {
-                  await _settingsService.sendTestNotification();
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Test-Benachrichtigung gesendet')),
-                    );
-                  }
-                },
+                onPressed: _testNotification,
                 icon: const Icon(Icons.notifications_active),
                 label: const Text('Test-Benachrichtigung senden'),
+              ),
+              const SizedBox(height: 8),
+              // Debug-Test-Button für direkte Benachrichtigung
+              OutlinedButton.icon(
+                onPressed: _sendDebugNotification,
+                icon: const Icon(Icons.bug_report),
+                label: const Text('Direkte Test-Benachrichtigung'),
               ),
             ],
             
@@ -428,6 +430,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+  
+  // Benachrichtigungen testen
+  Future<void> _testNotification() async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Sende Test-Benachrichtigung...'),
+        duration: Duration(seconds: 1),
+      ),
+    );
+    
+    final entry = await _timeEntryService.getMostRecentTimeEntry(widget.user.uid);
+    
+    if (entry != null) {
+      await _timeEntryService.sendApprovalNotification(entry);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Test-Benachrichtigung wurde gesendet'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Kein Zeiteintrag gefunden für den Test'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    }
+  }
+
+  // Debug-Test-Button für direkte Benachrichtigung
+  Future<void> _sendDebugNotification() async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Sende direkte Test-Benachrichtigung...'),
+        duration: Duration(seconds: 1),
+      ),
+    );
+    
+    await _settingsService.sendDebugNotification();
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Direkte Test-Benachrichtigung wurde gesendet'),
+        backgroundColor: Colors.green,
       ),
     );
   }

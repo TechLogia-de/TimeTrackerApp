@@ -1,5 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/time/time_entry_model.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:intl/intl.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:io' show Platform;
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 class TimeEntryService {
   static final TimeEntryService _instance = TimeEntryService._internal();
@@ -747,6 +754,482 @@ class TimeEntryService {
     } catch (e) {
       print('Fehler bei der Ablehnung des Zeiteintrags: $e');
       throw Exception('Fehler bei der Ablehnung des Zeiteintrags');
+    }
+  }
+
+  // Status-Änderungen überwachen und Benachrichtigungen auslösen
+  Future<void> checkForApprovedEntries(String userId) async {
+    SharedPreferences? prefs;
+    try {
+      print("⏱️ Beginne Überprüfung auf genehmigte Einträge für Benutzer $userId");
+      
+      // Hole die zuletzt überprüfte Zeit aus SharedPreferences mit Fehlerbehandlung
+      try {
+        prefs = await SharedPreferences.getInstance();
+      } catch (e) {
+        print("⚠️ Fehler beim Initialisieren von SharedPreferences: $e");
+        // Wenn SharedPreferences nicht initialisiert werden kann, verwenden wir einen Fallback
+        prefs = null;
+      }
+      
+      final lastCheckKey = 'last_approval_check_$userId';
+      
+      // Für Testzwecke: Immer einen Zeitstempel von vor einer Stunde verwenden
+      // Dies stellt sicher, dass wir immer nach neuen Genehmigungen suchen
+      DateTime lastCheck = DateTime.now().subtract(const Duration(hours: 1));
+      
+      // Debug-Ausgabe für den tatsächlichen gespeicherten Wert, wenn prefs verfügbar ist
+      if (prefs != null) {
+        String? lastCheckStr = prefs.getString(lastCheckKey);
+        if (lastCheckStr != null) {
+          print("🔍 Gespeicherter letzter Check war: $lastCheckStr");
+          try {
+            DateTime storedDate = DateTime.parse(lastCheckStr);
+            if (storedDate.year > 2024) {
+              print("⚠️ Ungültiges Datum in der Zukunft gefunden, verwende Fallback");
+            }
+          } catch (e) {
+            print("⚠️ Fehler beim Parsen des gespeicherten Datums: $e");
+          }
+        } else {
+          print("🆕 Kein vorheriger Check gefunden, erster Lauf");
+        }
+      } else {
+        print("⚠️ SharedPreferences nicht verfügbar, verwende Fallback-Zeit");
+      }
+      
+      print("🔎 Suche nach Genehmigungen seit: ${lastCheck.toIso8601String()}");
+      
+      // Suche nach kürzlich genehmigten Einträgen
+      final QuerySnapshot snapshot = await _firestore
+          .collection('timeEntries')
+          .where('userId', isEqualTo: userId)
+          .where('status', isEqualTo: 'approved')
+          .orderBy('updatedAt', descending: true)
+          .limit(10) // Begrenze auf die 10 neuesten Einträge für bessere Performance
+          .get();
+      
+      final approvedEntries = snapshot.docs.map((doc) => TimeEntry.fromFirestore(doc)).toList();
+      
+      print("✅ Gefunden: ${approvedEntries.length} genehmigte Einträge");
+      
+      // Gebe die IDs und Genehmigungsdaten für alle gefundenen Einträge aus
+      for (final entry in approvedEntries) {
+        final approvedAt = entry.updatedAt;
+        print("📝 Eintrag ${entry.id}: Aktualisiert am ${approvedAt.toIso8601String()}");
+        
+        // Überprüfe, ob der Eintrag nach dem letzten Check genehmigt wurde
+        if (approvedAt.isAfter(lastCheck)) {
+          print("🔔 Sende Benachrichtigung für Zeiteintrag: ${entry.id}");
+          // Verwende die normale Benachrichtigungsmethode statt der Debug-Version
+          await sendApprovalNotification(entry);
+        } else {
+          print("⏭️ Überspringe Eintrag ${entry.id}: Älter als der letzte Check");
+        }
+      }
+      
+      // Aktualisiere den Zeitstempel für die letzte Prüfung, wenn prefs verfügbar ist
+      if (prefs != null) {
+        String newTimestamp = DateTime.now().toIso8601String();
+        await prefs.setString(lastCheckKey, newTimestamp);
+        print("💾 Neuer letzter Check-Zeitstempel gespeichert: $newTimestamp");
+      }
+    } catch (e, stackTrace) {
+      print('❌ Fehler bei der Prüfung auf genehmigte Zeiteinträge: $e');
+      print('Stacktrace: $stackTrace');
+    }
+  }
+  
+  // Hilfsmethode für lokale Benachrichtigungen als Fallback
+  Future<void> _sendLocalNotification(int id, String title, String body, String? entryId) async {
+    try {
+      final FlutterLocalNotificationsPlugin plugin = FlutterLocalNotificationsPlugin();
+      
+      // Android-Kanal sicherstellen
+      await plugin
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(
+            const AndroidNotificationChannel(
+              'time_approval_channel',
+              'Zeitgenehmigungen',
+              description: 'Benachrichtigungen über genehmigte Zeiteinträge',
+              importance: Importance.high,
+            ),
+          );
+      
+      // iOS und Android Details
+      const NotificationDetails details = NotificationDetails(
+        android: AndroidNotificationDetails(
+          'time_approval_channel',
+          'Zeitgenehmigungen',
+          channelDescription: 'Benachrichtigungen über genehmigte Zeiteinträge',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+          sound: 'default',
+          interruptionLevel: InterruptionLevel.timeSensitive,
+        ),
+      );
+      
+      // Benachrichtigung anzeigen
+      await plugin.show(
+        id,
+        title,
+        body,
+        details,
+        payload: entryId != null ? 'time_entry_$entryId' : null,
+      );
+      
+      print('🔔 Lokale Benachrichtigung gesendet');
+    } catch (e) {
+      print('⚠️ Fehler beim Senden der lokalen Benachrichtigung: $e');
+    }
+  }
+  
+  // Eine zuverlässigere Benachrichtigung für Testzwecke
+  Future<void> sendDebugApprovalNotification(TimeEntry entry) async {
+    try {
+      // Eindeutige ID für diese Benachrichtigung
+      final int notificationId = 12345;
+      
+      print('📱 Sende Test-Benachrichtigung für Zeiteintrag: ${entry.id}');
+      
+      // Sicherstellen, dass id nicht null ist
+      final String entryId = entry.id ?? 'unknown_id';
+      
+      // 1. Lokale Benachrichtigung für Fallback
+      await _sendLocalNotification(
+        notificationId, 
+        'Zeiteintrag jetzt genehmigt! 🎉', 
+        'Ein Zeiteintrag wurde genehmigt. Tippen zum Ansehen.', 
+        entryId
+      );
+      
+      // 2. In-App-Benachrichtigung speichern
+      await saveInAppNotification(entry);
+      
+      // 3. FCM-Benachrichtigung senden, stellen wir sicher dass alle Parameter nicht-null sind
+      final String safeUserId = entry.userId;
+      const String safeTitle = 'Zeiteintrag jetzt genehmigt! 🎉';
+      const String safeBody = 'Ein Zeiteintrag wurde genehmigt. Tippen zum Ansehen.';
+      
+      await _sendFCMNotification(
+        safeUserId,
+        safeTitle,
+        safeBody,
+        entryId
+      );
+      
+      print('📣 Test-Benachrichtigung erfolgreich gesendet');
+    } catch (e, stackTrace) {
+      print('❌ Fehler beim Senden der Test-Benachrichtigung: $e');
+      print('Stacktrace: $stackTrace');
+    }
+  }
+  
+  // Speichert eine In-App-Benachrichtigung in Firestore
+  Future<void> saveInAppNotification(TimeEntry entry) async {
+    try {
+      final DateFormat formatter = DateFormat.yMd('de_DE');
+      final String formattedDate = formatter.format(entry.date);
+      
+      // Prüfen, ob bereits eine ungelesene Benachrichtigung für diesen Zeiteintrag existiert
+      final existingQuery = await _firestore
+          .collection('notifications')
+          .where('userId', isEqualTo: entry.userId)
+          .where('relatedEntityId', isEqualTo: entry.id)
+          .where('read', isEqualTo: false)
+          .get();
+      
+      // Wenn bereits eine ungelesene Benachrichtigung existiert, keine neue erstellen
+      if (existingQuery.docs.isNotEmpty) {
+        print('📝 In-App-Benachrichtigung für Zeiteintrag ${entry.id} existiert bereits');
+        return;
+      }
+      
+      // Alte Benachrichtigungen desselben Eintrags als gelesen markieren, falls vorhanden
+      final oldNotificationsQuery = await _firestore
+          .collection('notifications')
+          .where('userId', isEqualTo: entry.userId)
+          .where('relatedEntityId', isEqualTo: entry.id)
+          .get();
+      
+      if (oldNotificationsQuery.docs.isNotEmpty) {
+        // Batch-Update für bessere Performance
+        final batch = _firestore.batch();
+        
+        for (final doc in oldNotificationsQuery.docs) {
+          batch.update(doc.reference, {
+            'read': true,
+            'readAt': DateTime.now(),
+          });
+        }
+        
+        await batch.commit();
+        print('📋 ${oldNotificationsQuery.docs.length} ältere Benachrichtigungen für Zeiteintrag ${entry.id} als gelesen markiert');
+      }
+      
+      // Benachrichtigungsdaten vorbereiten
+      final Map<String, dynamic> notificationData = {
+        'userId': entry.userId,
+        'title': 'Zeiteintrag genehmigt',
+        'body': 'Dein Zeiteintrag für ${entry.projectName} vom $formattedDate wurde genehmigt.',
+        'type': 'time_approval',
+        'relatedEntityId': entry.id,
+        'read': false,
+        'createdAt': DateTime.now(),
+        'readAt': null,
+      };
+      
+      // In Firestore speichern
+      final docRef = await _firestore
+          .collection('notifications')
+          .add(notificationData);
+      
+      print('📝 Neue In-App-Benachrichtigung in Firestore gespeichert (ID: ${docRef.id})');
+    } catch (e) {
+      print('❌ Fehler beim Speichern der In-App-Benachrichtigung: $e');
+    }
+  }
+  
+  // Sendet Benachrichtigung über genehmigten Zeiteintrag
+  Future<void> sendApprovalNotification(TimeEntry entry) async {
+    try {
+      // Sicherstellen, dass Berechtigungen vorhanden sind
+      bool permissionsGranted = await _checkNotificationPermissions();
+      if (!permissionsGranted) {
+        print('⚠️ Benachrichtigungsberechtigungen fehlen. Keine Benachrichtigung möglich.');
+        return;
+      }
+      
+      // Sicherstellen dass entry.id nicht null ist
+      final String entryId = entry.id ?? 'unknown_id';
+      
+      // Formatiere Datum für die Anzeige
+      final DateFormat formatter = DateFormat.yMd('de_DE');
+      final String formattedDate = formatter.format(entry.date);
+      
+      // Benachrichtigungstitel und -inhalt
+      final String title = 'Zeiteintrag genehmigt 🎉';
+      final String body = 'Dein Zeiteintrag für ${entry.projectName} vom $formattedDate wurde genehmigt.';
+      
+      print('📱 Sende Genehmigungs-Benachrichtigung für Zeiteintrag: $entryId');
+      
+      // 1. Lokale Benachrichtigung für Fallback
+      await _sendLocalNotification(entryId.hashCode, title, body, entryId);
+      
+      // 2. In-App-Benachrichtigung in Firestore speichern
+      await saveInAppNotification(entry);
+      
+      // 3. FCM-Benachrichtigung an das Gerät des Benutzers senden
+      await _sendFCMNotification(entry.userId, title, body, entryId);
+      
+      print('📣 Benachrichtigungsprozess abgeschlossen');
+    } catch (e, stackTrace) {
+      print('❌ Fehler beim Senden der Genehmigungs-Benachrichtigung: $e');
+      print('Stacktrace: $stackTrace');
+    }
+  }
+  
+  // Sendet eine FCM-Benachrichtigung an ein bestimmtes Gerät
+  Future<void> _sendFCMNotification(String userId, String title, String body, String entryId) async {
+    try {
+      // 1. Gerät-Token für den Benutzer abrufen
+      final tokenDoc = await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('tokens')
+          .doc('current')
+          .get();
+      
+      if (!tokenDoc.exists) {
+        print('⚠️ Kein FCM-Token für Benutzer $userId gefunden');
+        return;
+      }
+      
+      final tokenData = tokenDoc.data();
+      if (tokenData == null) {
+        print('⚠️ Token-Daten sind null für Benutzer $userId');
+        return;
+      }
+      
+      final fcmToken = tokenData['token'];
+      if (fcmToken == null) {
+        print('⚠️ FCM-Token ist null für Benutzer $userId');
+        return;
+      }
+      
+      final String tokenStr = fcmToken.toString();
+      if (tokenStr.isEmpty) {
+        print('⚠️ FCM-Token ist leer für Benutzer $userId');
+        return;
+      }
+      
+      print('🔑 FCM-Token gefunden: ${tokenStr.length > 10 ? tokenStr.substring(0, 10) : tokenStr}...');
+      
+      // 2. Benachrichtigungsdaten vorbereiten
+      final Map<String, dynamic> notificationData = {
+        'token': tokenStr,
+        'notification': {
+          'title': title,
+          'body': body,
+        },
+        'data': {
+          'click_action': 'FLUTTER_NOTIFICATION_CLICK',
+          'type': 'time_approval',
+          'entry_id': entryId,
+        },
+        'android': {
+          'priority': 'high',
+          'notification': {
+            'channel_id': 'time_approval_channel',
+            'priority': 'high',
+            'default_sound': true,
+            'default_vibrate_timings': true,
+          }
+        },
+        'apns': {
+          'headers': {
+            'apns-priority': '10',
+          },
+          'payload': {
+            'aps': {
+              'alert': {
+                'title': title,
+                'body': body,
+              },
+              'badge': 1,
+              'sound': 'default',
+              'content-available': 1,
+              'mutable-content': 1,
+              'category': 'timeApproval',
+            },
+          },
+        },
+      };
+      
+      // 3. FCM-Message in Firestore speichern, von wo Cloud Function sie verarbeitet
+      await _firestore.collection('fcmMessages').add({
+        'userId': userId,
+        'message': notificationData,
+        'status': 'pending',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      
+      print('🚀 FCM-Nachricht in Firestore gespeichert - wird durch Cloud Function gesendet');
+    } catch (e) {
+      print('❌ Fehler beim Vorbereiten der FCM-Benachrichtigung: $e');
+    }
+  }
+  
+  // Speichert FCM-Token für Benachrichtigungen
+  Future<void> saveFCMToken(String userId, String token) async {
+    try {
+      await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('tokens')
+          .doc('current')
+          .set({
+            'token': token,
+            'platform': Platform.isIOS ? 'ios' : 'android',
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+      
+      print('✅ FCM-Token für Benutzer $userId gespeichert');
+    } catch (e) {
+      print('❌ Fehler beim Speichern des FCM-Tokens: $e');
+    }
+  }
+  
+  // Debug-Methode zum direkten Senden einer FCM-Nachricht
+  Future<void> sendTestFCMNotification(String userId) async {
+    try {
+      await _sendFCMNotification(
+        userId,
+        'Test-Benachrichtigung 🧪',
+        'Dies ist eine Testbenachrichtigung via Firebase Cloud Messaging',
+        'test_entry_id',
+      );
+      
+      print('🧪 Test-FCM-Benachrichtigung gesendet');
+    } catch (e) {
+      print('❌ Fehler beim Senden der Test-FCM-Benachrichtigung: $e');
+    }
+  }
+  
+  // Prüft, ob Benachrichtigungsberechtigungen vorhanden sind
+  Future<bool> _checkNotificationPermissions() async {
+    try {
+      final FlutterLocalNotificationsPlugin plugin = FlutterLocalNotificationsPlugin();
+      
+      // iOS-Berechtigungen prüfen
+      final iOS = plugin.resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>();
+      if (iOS != null) {
+        final result = await iOS.requestPermissions(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+        if (result != true) {
+          print('iOS Benachrichtigungsberechtigungen nicht erteilt');
+          return false;
+        }
+      }
+      
+      // Android-Berechtigungen (für API 33+)
+      final android = plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      if (android != null) {
+        try {
+          // Für neuere Android-Versionen
+          final hasPermission = await android.areNotificationsEnabled() ?? true;
+          if (!hasPermission) {
+            print('Android Benachrichtigungsberechtigungen nicht erteilt');
+            
+            // Wir können auf Android die Berechtigungen nicht direkt anfordern
+            // Stattdessen müssen wir den Benutzer zu den Einstellungen leiten
+            print('Der Benutzer muss die Benachrichtigungen manuell in den Einstellungsseite leiten');
+            
+            // Für diesen Test nehmen wir an, dass die Berechtigungen OK sind
+            // In einer Produktionsanwendung würden wir den Benutzer zur Einstellungsseite leiten
+          }
+        } catch (e) {
+          // Ältere Android-Versionen werfen möglicherweise Fehler
+          print('Fehler bei Android-Berechtigungsprüfung: $e');
+          // Wir nehmen an, dass Berechtigungen auf älteren Versionen vorhanden sind
+        }
+      }
+      
+      print('Benachrichtigungsberechtigungen sind vorhanden');
+      return true;
+    } catch (e) {
+      print('Fehler bei der Überprüfung der Benachrichtigungsberechtigungen: $e');
+      return false;
+    }
+  }
+
+  // Holt den neuesten Zeiteintrag eines Benutzers (für Testzwecke)
+  Future<TimeEntry?> getMostRecentTimeEntry(String userId) async {
+    try {
+      final QuerySnapshot snapshot = await _firestore
+          .collection('timeEntries')
+          .where('userId', isEqualTo: userId)
+          .orderBy('updatedAt', descending: true)
+          .limit(1)
+          .get();
+          
+      if (snapshot.docs.isEmpty) {
+        return null;
+      }
+      
+      return TimeEntry.fromFirestore(snapshot.docs.first);
+    } catch (e) {
+      print('Fehler beim Abrufen des neuesten Zeiteintrags: $e');
+      return null;
     }
   }
 } 

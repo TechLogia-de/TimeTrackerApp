@@ -393,6 +393,13 @@ class _TimeApprovalScreenState extends State<TimeApprovalScreen> with SingleTick
                 color: Colors.grey.shade700,
               ),
             ),
+            // Test-Button für Benachrichtigungen
+            const SizedBox(height: 32),
+            OutlinedButton.icon(
+              onPressed: _testApprovalNotification,
+              icon: const Icon(Icons.notifications_active),
+              label: const Text('Test-Benachrichtigung senden'),
+            ),
           ],
         ),
       );
@@ -625,5 +632,50 @@ class _TimeApprovalScreenState extends State<TimeApprovalScreen> with SingleTick
         ),
       ],
     );
+  }
+  
+  // Testfunktion für das Senden einer Genehmigungsbenachrichtigung
+  Future<void> _testApprovalNotification() async {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) return;
+    
+    try {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Suche nach einem Zeiteintrag für den Test...'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+      
+      // Versuche, einen beliebigen Zeiteintrag zu finden
+      final recentEntries = await _timeEntryService.getTimeEntriesForUserPaginated(userId, 1);
+      
+      if (recentEntries.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Kein Zeiteintrag gefunden für den Test'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+      
+      // Sende eine Test-Benachrichtigung mit dem ersten gefundenen Eintrag
+      await _timeEntryService.sendApprovalNotification(recentEntries.first);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Test-Benachrichtigung wurde gesendet'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Fehler beim Senden der Test-Benachrichtigung: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 } 

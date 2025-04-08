@@ -13,18 +13,83 @@ import 'services/customer_service.dart';
 import 'services/project_service.dart';
 import 'services/auth_service.dart';
 import 'services/settings_service.dart';
+import 'services/time/time_entry_service.dart';
 import 'dart:io';
+import 'dart:async';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
+// GoRouterRefreshStream Klasse zur Reaktion auf Auth-Änderungen
+class GoRouterRefreshStream extends ChangeNotifier {
+  late final StreamSubscription<dynamic> _subscription;
+  
+  GoRouterRefreshStream(Stream<dynamic> stream) {
+    _subscription = stream.asBroadcastStream().listen(
+      (dynamic _) {
+        // Benachrichtige Hörer über Änderungen am Authentifizierungsstatus,
+        // damit der Router entsprechend reagieren kann
+        notifyListeners();
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _subscription.cancel();
+    super.dispose();
+  }
+}
 
 // Globale Instanzen für Services
 final customerService = CustomerService();
 final projectService = ProjectService();
 final authService = AuthService();
 final settingsService = SettingsService();
+final timeEntryService = TimeEntryService();
+
+// Hintergrund-Handler für FCM-Nachrichten, wenn die App geschlossen ist
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // Stelle sicher, dass Firebase initialisiert ist
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  
+  print("📱 Hintergrund-Nachricht empfangen: ${message.messageId}");
+  
+  // Du kannst hier keine UI-Aktionen ausführen, aber Daten speichern oder lokale Benachrichtigungen anzeigen
+  await initNotifications();
+  
+  final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+  
+  await flutterLocalNotificationsPlugin.show(
+    message.hashCode,
+    message.notification?.title ?? 'Neue Benachrichtigung',
+    message.notification?.body ?? 'Tippen zum Anzeigen',
+    const NotificationDetails(
+      android: AndroidNotificationDetails(
+        'time_approval_channel',
+        'Zeitgenehmigungen',
+        channelDescription: 'Benachrichtigungen über genehmigte Zeiteinträge',
+        importance: Importance.high,
+        priority: Priority.high,
+      ),
+      iOS: DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+        sound: 'default',
+      ),
+    ),
+    payload: message.data['entry_id'],
+  );
+}
 
 // Go Router Konfiguration
 final _router = GoRouter(
   initialLocation: '/',
+  // refreshListenable hier, damit Router auf Auth-Änderungen reagiert
+  refreshListenable: GoRouterRefreshStream(authService.authStateChanges),
+  debugLogDiagnostics: true, // Hilft bei der Fehlersuche
   redirect: (context, state) {
     // Überprüfe Authentifizierung
     final bool isLoggedIn = authService.currentUser != null;
@@ -140,36 +205,211 @@ final _router = GoRouter(
 );
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  
   try {
-    print('🚀 App wird gestartet...');
-    
-    // Lokalisierungsdaten für Deutsch initialisieren
-    await initializeDateFormatting('de_DE', null);
-    print('✅ Lokalisierungsdaten initialisiert');
+    WidgetsFlutterBinding.ensureInitialized();
     
     // Firebase initialisieren
     await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
+      options: DefaultFirebaseOptions.currentPlatform
     );
-    print('✅ Firebase initialisiert');
     
-    // Services initialisieren
-    await _initializeServices();
+    // FCM-Hintergrund-Handler registrieren
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
     
-    // Prüfe Sitzungsgültigkeit
-    await _checkSessionValidity();
+    // Initialisiere FCM
+    await initFirebaseMessaging();
     
+    // Initialisiere lokale Benachrichtigungen
+    await initNotifications();
+    
+    // Initialisiere das Datum-Format für die deutsche Lokalisierung
+    await initializeDateFormatting('de_DE', null);
+    
+    // Starte die App
     runApp(const MyApp());
-    print('✅ App gestartet');
   } catch (e, stackTrace) {
-    // Kritische Fehlerprotokollierung
-    print('❌ KRITISCHER FEHLER BEIM APP-START: $e');
+    print('❌ Kritischer Fehler beim Starten der App: $e');
     print('Stacktrace: $stackTrace');
     
-    // Trotzdem versuchen, die App zu starten
+    // Fallback-App bei kritischen Fehlern anzeigen
     runApp(const ErrorFallbackApp());
+  }
+}
+
+// Initialisiert Firebase Cloud Messaging
+Future<void> initFirebaseMessaging() async {
+  try {
+    final messaging = FirebaseMessaging.instance;
+    
+    // Berechtigungen anfordern
+    NotificationSettings settings = await messaging.requestPermission(
+      alert: true,
+      announcement: false,
+      badge: true,
+      carPlay: false,
+      criticalAlert: true,
+      provisional: true,
+      sound: true,
+    );
+    
+    print('⚙️ FCM-Benachrichtigungseinstellungen: ${settings.authorizationStatus}');
+    
+    // iOS Vordergrund-Benachrichtigungen aktivieren
+    await messaging.setForegroundNotificationPresentationOptions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+    
+    // Aktuelles FCM-Token abrufen
+    String? token = await messaging.getToken();
+    if (token != null) {
+      print('📱 FCM-Token: ${token.substring(0, 20)}...');
+      
+      // Wenn ein Benutzer angemeldet ist, Token mit der Benutzer-ID speichern
+      final currentUser = authService.currentUser;
+      if (currentUser != null) {
+        await timeEntryService.saveFCMToken(currentUser.uid, token);
+      }
+    }
+    
+    // Auf Token-Aktualisierungen reagieren
+    messaging.onTokenRefresh.listen((String newToken) {
+      print('📱 FCM-Token aktualisiert');
+      final currentUser = authService.currentUser;
+      if (currentUser != null) {
+        timeEntryService.saveFCMToken(currentUser.uid, newToken);
+      }
+    });
+    
+    // Auf Nachrichten reagieren, wenn die App im Vordergrund läuft
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      print('📩 Vordergrund-Nachricht empfangen: ${message.messageId}');
+      
+      // Zeige eine lokale Benachrichtigung an
+      FlutterLocalNotificationsPlugin().show(
+        message.hashCode,
+        message.notification?.title ?? 'Neue Benachrichtigung',
+        message.notification?.body ?? 'Tippen zum Anzeigen',
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'time_approval_channel',
+            'Zeitgenehmigungen',
+            channelDescription: 'Benachrichtigungen über genehmigte Zeiteinträge',
+            importance: Importance.high,
+            priority: Priority.high,
+          ),
+          iOS: DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+            sound: 'default',
+          ),
+        ),
+        payload: message.data['entry_id'],
+      );
+    });
+    
+    // Auf Benachrichtigungen reagieren, wenn die App im Hintergrund läuft
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      print('🔔 App durch Benachrichtigung geöffnet: ${message.messageId}');
+      
+      // Hier kannst du zur entsprechenden Seite navigieren
+      // Beispiel: _router.go('/time/${message.data['entry_id']}');
+    });
+    
+    print('✅ Firebase Cloud Messaging erfolgreich initialisiert');
+  } catch (e, stackTrace) {
+    print('❌ Fehler bei der Initialisierung von Firebase Cloud Messaging: $e');
+    print('Stacktrace: $stackTrace');
+  }
+}
+
+// Benachrichtigungskanäle initialisieren
+Future<void> initNotifications() async {
+  try {
+    print("🔔 Initialisiere Benachrichtigungssystem...");
+    
+    final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+        FlutterLocalNotificationsPlugin();
+    
+    // Android-Konfiguration
+    const AndroidInitializationSettings initializationSettingsAndroid =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+    
+    // iOS-Konfiguration
+    const DarwinInitializationSettings initializationSettingsDarwin =
+        DarwinInitializationSettings(
+      requestAlertPermission: true,  // Bei Initialisierung Berechtigungen anfordern
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+      defaultPresentAlert: true,     // Standardmäßig Benachrichtigungen anzeigen
+      defaultPresentBadge: true,
+      defaultPresentSound: true,
+    );
+    
+    // Initialisierungseinstellungen
+    const InitializationSettings initializationSettings = InitializationSettings(
+      android: initializationSettingsAndroid,
+      iOS: initializationSettingsDarwin,
+    );
+    
+    // Plugin initialisieren mit Callback für Interaktionen
+    await flutterLocalNotificationsPlugin.initialize(
+      initializationSettings,
+      onDidReceiveNotificationResponse: (NotificationResponse response) {
+        print("👆 Benutzer hat auf Benachrichtigung getippt: ${response.payload}");
+        // Hier könnte Navigation zur entsprechenden Seite erfolgen
+      },
+    );
+    
+    // Android-Benachrichtigungskanäle erstellen
+    await _createNotificationChannels(flutterLocalNotificationsPlugin);
+    
+    print("✅ Benachrichtigungssystem erfolgreich initialisiert");
+  } catch (e, stackTrace) {
+    print("❌ Fehler bei der Initialisierung der Benachrichtigungen: $e");
+    print("Stacktrace: $stackTrace");
+  }
+}
+
+// Erstellt alle benötigten Benachrichtigungskanäle für Android
+Future<void> _createNotificationChannels(FlutterLocalNotificationsPlugin plugin) async {
+  try {
+    final android = plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+        
+    if (android != null) {
+      // Hauptkanal für Zeitgenehmigungen
+      await android.createNotificationChannel(
+        const AndroidNotificationChannel(
+          'time_approval_channel',
+          'Zeitgenehmigungen',
+          description: 'Benachrichtigungen über genehmigte Zeiteinträge',
+          importance: Importance.high,
+          enableVibration: true,
+          enableLights: true,
+          showBadge: true,
+        ),
+      );
+      
+      // Test-Kanal für direkte Benachrichtigungen
+      await android.createNotificationChannel(
+        const AndroidNotificationChannel(
+          'time_approval_test_channel',
+          'Test Benachrichtigungen',
+          description: 'Testkanalbenachrichtigungen',
+          importance: Importance.max,
+          enableVibration: true,
+          enableLights: true,
+          showBadge: true,
+        ),
+      );
+      
+      print("📢 Android-Benachrichtigungskanäle erfolgreich erstellt");
+    }
+  } catch (e) {
+    print("⚠️ Fehler beim Erstellen von Android-Benachrichtigungskanälen: $e");
   }
 }
 

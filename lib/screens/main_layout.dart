@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../widgets/navigation/bottom_nav_bar.dart';
 import '../widgets/navigation/app_bar.dart';
 import '../services/auth_service.dart';
@@ -15,6 +16,7 @@ import 'profile_screen.dart';
 import 'dashboard_screen.dart';
 import 'settings_screen.dart';
 import '../main.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class MainLayout extends StatefulWidget {
   final User user;
@@ -53,6 +55,10 @@ class MainLayoutState extends State<MainLayout> with SingleTickerProviderStateMi
   // TabController für synchronisierte Animation
   late TabController _tabController;
   
+  // Benachrichtigungen
+  final FlutterLocalNotificationsPlugin _notificationsPlugin = FlutterLocalNotificationsPlugin();
+  Timer? _approvalCheckTimer;
+  
   @override
   void initState() {
     super.initState();
@@ -86,6 +92,12 @@ class MainLayoutState extends State<MainLayout> with SingleTickerProviderStateMi
     
     // Benachrichtigungsberechtigung anfordern, wenn die App startet
     _requestNotificationPermissionIfNeeded();
+    
+    // Benachrichtigungen initialisieren
+    _initializeNotifications();
+    
+    // Timer für die Prüfung auf genehmigte Zeiteinträge starten
+    _startApprovalCheckTimer();
   }
   
   @override
@@ -93,6 +105,7 @@ class MainLayoutState extends State<MainLayout> with SingleTickerProviderStateMi
     _pageController.dispose();
     _tabController.dispose();
     _timerPollingTimer?.cancel();
+    _approvalCheckTimer?.cancel();
     super.dispose();
   }
   
@@ -234,55 +247,116 @@ class MainLayoutState extends State<MainLayout> with SingleTickerProviderStateMi
   
   // Diese Methode fragt nach der Benachrichtigungsberechtigung, wenn sie nicht zuvor erteilt wurde
   Future<void> _requestNotificationPermissionIfNeeded() async {
-    // Verzögere die Anfrage leicht, damit die App vollständig geladen werden kann
-    await Future.delayed(const Duration(seconds: 1));
-    
-    // Prüfe, ob der Benutzer bereits aufgefordert wurde
-    final shouldPrompt = await settingsService.shouldPromptForNotifications();
-    
-    if (shouldPrompt && mounted) {
-      // Zeige einen Dialog, der erklärt, warum wir Benachrichtigungen benötigen
-      final result = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false, // Benutzer muss eine Option auswählen
-        builder: (context) => AlertDialog(
-          title: const Text('Benachrichtigungen erlauben'),
-          content: const Text(
-            'Die TimeTrackerApp möchte Ihnen Benachrichtigungen senden, um Sie über laufende Timer und wichtige Erinnerungen zu informieren.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () async {
-                // Als abgelehnt markieren, aber trotzdem als "gefragt" speichern
-                await settingsService.setNotificationsPrompted(true);
-                await settingsService.setNotificationsEnabled(false);
-                Navigator.of(context).pop(false);
-              },
-              child: const Text('Ablehnen'),
+    try {
+      // Überprüfe zuerst den tatsächlichen Berechtigungsstatus vom System
+      final permissionStatus = await Permission.notification.status;
+      
+      // Wenn Benachrichtigungen bereits erlaubt sind, aktualisiere nur die Einstellungen
+      if (permissionStatus.isGranted) {
+        print('📱 Benachrichtigungen sind bereits vom System erlaubt');
+        await settingsService.setNotificationsEnabled(true);
+        await settingsService.setNotificationsPrompted(true);
+        return;
+      }
+      
+      // Wenn permanent abgelehnt, nicht erneut fragen
+      if (permissionStatus.isPermanentlyDenied) {
+        print('📱 Benachrichtigungen wurden dauerhaft abgelehnt');
+        await settingsService.setNotificationsEnabled(false);
+        await settingsService.setNotificationsPrompted(true);
+        return;
+      }
+      
+      // Prüfe, ob der Benutzer bereits in unserer App gefragt wurde
+      final notificationsPrompted = await settingsService.shouldPromptForNotifications();
+      
+      // Nur einmal fragen - wenn die App den Benutzer bereits gefragt hat, nicht erneut fragen
+      if (!notificationsPrompted) {
+        print('📱 Zeige Benachrichtigungsdialog zum ersten Mal');
+        
+        // Verzögere die Anfrage leicht, damit die App vollständig geladen werden kann
+        await Future.delayed(const Duration(seconds: 1));
+        
+        if (!mounted) return;
+        
+        // Zeige einen Dialog, der erklärt, warum wir Benachrichtigungen benötigen
+        bool? result;
+        try {
+          result = await showDialog<bool>(
+            context: context,
+            barrierDismissible: false,
+            builder: (BuildContext dialogContext) => AlertDialog(
+              title: const Text('Benachrichtigungen'),
+              content: const Text(
+                'Möchten Sie Benachrichtigungen erhalten, wenn Ihre Zeiteinträge genehmigt werden?',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop(false);
+                  },
+                  child: const Text('Nein, danke'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop(true);
+                  },
+                  child: const Text('Ja, benachrichtigen'),
+                ),
+              ],
             ),
-            FilledButton(
-              onPressed: () async {
-                Navigator.of(context).pop(true);
-                final granted = await settingsService.requestNotificationPermission();
-                
-                // Benachrichtigungsstatus in Einstellungen aktualisieren
-                await settingsService.setNotificationsEnabled(granted);
-                
-                if (mounted && granted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Benachrichtigungen wurden aktiviert'),
-                      backgroundColor: Colors.green,
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-                }
-              },
-              child: const Text('Erlauben'),
-            ),
-          ],
-        ),
-      );
+          );
+        } catch (e) {
+          print('❌ Fehler beim Anzeigen des Benachrichtigungsdialogs: $e');
+          result = false;
+        }
+        
+        // Markiere als gefragt, unabhängig von der Entscheidung
+        await settingsService.setNotificationsPrompted(true);
+        
+        if (result == true) {
+          print('📱 Benutzer hat Benachrichtigungen zugestimmt');
+          await settingsService.setNotificationsEnabled(true);
+          
+          // Verzögerung hinzufügen, um UI-Aktualisierungen abzuschließen
+          await Future.delayed(const Duration(milliseconds: 300));
+          
+          // Systemdialog für Berechtigungen nur anzeigen, wenn Widget noch eingebunden ist
+          if (mounted) {
+            try {
+              await settingsService.requestNotificationPermission();
+            } catch (e) {
+              print('❌ Fehler beim Anfordern der Benachrichtigungsberechtigung: $e');
+            }
+          }
+        } else {
+          print('📱 Benutzer hat Benachrichtigungen abgelehnt');
+          await settingsService.setNotificationsEnabled(false);
+        }
+      } else {
+        print('📱 Benutzer wurde bereits nach Benachrichtigungen gefragt');
+      }
+    } catch (e) {
+      print('❌ Fehler beim Abfragen der Benachrichtigungsberechtigungen: $e');
+    }
+  }
+  
+  // Methode zum expliziten Anfordern von Benachrichtigungsberechtigungen
+  Future<void> _requestNotificationPermissions() async {
+    try {
+      // Berechtigungen für iOS anfordern
+      await _notificationsPlugin
+          .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
+          ?.requestPermissions(
+            alert: true,
+            badge: true,
+            sound: true,
+          );
+          
+      // Für Android reicht es, den Kanal zu erstellen
+      print('Benachrichtigungsberechtigungen angefordert');
+    } catch (e) {
+      print('Fehler beim Anfordern der Benachrichtigungsberechtigungen: $e');
     }
   }
   
@@ -523,5 +597,67 @@ class MainLayoutState extends State<MainLayout> with SingleTickerProviderStateMi
            email.endsWith('@admin.com') || 
            email.endsWith('@firma.de') ||
            email == 'test@test.de';
+  }
+  
+  // Diese Methode initialisiert die Benachrichtigungen
+  Future<void> _initializeNotifications() async {
+    try {
+      // Android-Einstellungen
+      const AndroidInitializationSettings initializationSettingsAndroid =
+          AndroidInitializationSettings('@mipmap/ic_launcher');
+
+      // iOS-Einstellungen
+      const DarwinInitializationSettings initializationSettingsIOS =
+          DarwinInitializationSettings(
+        requestAlertPermission: false,
+        requestBadgePermission: false,
+        requestSoundPermission: false,
+      );
+
+      // Initialisierungseinstellungen
+      const InitializationSettings initializationSettings =
+          InitializationSettings(
+        android: initializationSettingsAndroid,
+        iOS: initializationSettingsIOS,
+      );
+
+      // Plugin initialisieren
+      await _notificationsPlugin.initialize(
+        initializationSettings,
+        onDidReceiveNotificationResponse: _onNotificationTapped,
+      );
+      
+      print('Benachrichtigungen wurden initialisiert');
+    } catch (e) {
+      print('Fehler bei der Initialisierung der Benachrichtigungen: $e');
+    }
+  }
+  
+  // Wird aufgerufen, wenn der Benutzer auf eine Benachrichtigung tippt
+  void _onNotificationTapped(NotificationResponse response) {
+    // Navigation zur entsprechenden Seite, z.B. zur Zeiterfassungsseite
+    _onTabTapped(1); // Index 1 ist die Zeiterfassungsseite
+  }
+  
+  // Timer für die regelmäßige Prüfung auf genehmigte Zeiteinträge
+  void _startApprovalCheckTimer() {
+    // Prüfe alle 3 Minuten auf genehmigte Zeiteinträge (statt 15 Minuten)
+    _approvalCheckTimer = Timer.periodic(const Duration(minutes: 3), (_) {
+      _checkForApprovedEntries();
+    });
+    
+    // Sofort eine erste Prüfung durchführen
+    _checkForApprovedEntries();
+  }
+  
+  // Prüft, ob es neue genehmigte Zeiteinträge gibt
+  Future<void> _checkForApprovedEntries() async {
+    try {
+      if (widget.user != null) {
+        await _timeEntryService.checkForApprovedEntries(widget.user.uid);
+      }
+    } catch (e) {
+      print('Fehler bei der Prüfung auf genehmigte Zeiteinträge: $e');
+    }
   }
 } 

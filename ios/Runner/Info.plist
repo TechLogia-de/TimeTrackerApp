@@ -49,5 +49,26 @@
 	<string>Wir benötigen die Erlaubnis für Benachrichtigungen, um Sie über Timer und wichtige Erinnerungen zu informieren.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Diese Berechtigung wird nur für die Entwicklung benötigt und hat keinen Einfluss auf die Funktionalität der App.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>remote-notification</string>
+	</array>
+	<key>FirebaseAppDelegateProxyEnabled</key>
+	<false/>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<true/>
+	<key>NSAppleMusicUsageDescription</key>
+	<string>Nicht verwendet</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Nicht verwendet</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Nicht verwendet</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Nicht verwendet</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Nicht verwendet</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>Nicht verwendet</string>
 </dict>
 </plist>

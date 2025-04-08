@@ -5,6 +5,7 @@ import 'package:animated_text_kit/animated_text_kit.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../widgets/custom_text_field.dart';
 import '../services/auth_service.dart';
+import 'package:go_router/go_router.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -74,7 +75,12 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           },
         );
         
+        // Erst setState ausführen, dann die Navigation starten
         if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+          
           // Wenn Login erfolgreich, kurze Erfolgsmeldung anzeigen
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -83,20 +89,25 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
               duration: Duration(seconds: 2),
             ),
           );
+          
+          // Kurze Verzögerung vor der Navigation, um sicherzustellen, dass der Zustand aktualisiert wurde
+          Future.microtask(() {
+            // Verwende Go Router für die Navigation zum Dashboard
+            if (mounted) {
+              GoRouter.of(context).go('/');
+            }
+          });
         }
       } on Exception catch (e) {
         // Fehlerbehandlung mit klarem Feedback
-        setState(() {
-          _errorMessage = e.toString();
-          _errorMessage = _errorMessage!.replaceAll('Exception: ', '');
-        });
-        
-        print('Login-Fehler auf UI-Ebene: $_errorMessage');
-      } finally {
         if (mounted) {
           setState(() {
+            _errorMessage = e.toString();
+            _errorMessage = _errorMessage!.replaceAll('Exception: ', '');
             _isLoading = false;
           });
+          
+          print('Login-Fehler auf UI-Ebene: $_errorMessage');
         }
       }
     }
