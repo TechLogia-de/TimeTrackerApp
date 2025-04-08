@@ -1,65 +1,11 @@
 {
-  "dashboard": "Dashboard",
-  "weeklyOverview": "Weekly Overview",
-  "hoursPerDay": "Hours per Day",
-  "today": "Today",
-  "hours": "Hours",
-  "entries": "Entries",
-  "breakMinutes": "Break Minutes",
-  "totalThisWeek": "Total this Week",
-  "totalThisMonth": "Total this Month",
-  "activeProjects": "Active Projects",
-  "recentActivities": "Recent Activities",
-  "allActivities": "All",
-  "noDataAvailable": "No data available",
-  "noTimeEntries": "No time entries available",
-  "loadingData": "Loading data...",
-  
-  "goodMorning": "Good Morning",
-  "goodDay": "Good Day",
-  "goodEvening": "Good Evening",
-  
-  "monday": "Mon",
-  "tuesday": "Tue",
-  "wednesday": "Wed",
-  "thursday": "Thu",
-  "friday": "Fri",
-  "saturday": "Sat",
-  "sunday": "Sun",
-  
-  "currentTimeTracking": "Current Time Tracking",
-  "paused": "Paused",
-  "running": "Running",
-  "since": "Since",
-  "pause": "Pause",
-  "resume": "Resume",
-  "stop": "Stop",
-  
-  "settings": "Settings",
-  "language": "Language",
-  "selectLanguage": "Select Language",
-  "theme": "Theme",
-  "primaryColor": "Primary Color",
-  "accentColor": "Accent Color",
-  "darkMode": "Dark Mode",
-  "light": "Light",
-  "dark": "Dark",
-  "system": "System",
-  "notifications": "Notifications",
-  "enableNotifications": "Enable Notifications",
-  "notificationsDescription": "Receive reminders and timer updates",
-  "testNotification": "Send Test Notification",
-  "debugNotification": "Send Direct Test Notification",
-  "resetSettings": "Reset Settings",
-  "resetSettingsQuestion": "Do you want to reset all settings to default values?",
-  "reset": "Reset",
-  "cancel": "Cancel",
-  "save": "Save",
-  "error": "Error",
-  "success": "Success",
-  
-  "languages": {
-    "de": "German",
-    "en": "English"
+  "app": {
+    "title": "TimeTrackerApp"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit"
   }
-} 
+}

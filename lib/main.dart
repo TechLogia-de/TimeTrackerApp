@@ -4,6 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'firebase_options.dart';
 import 'screens/auth_wrapper.dart';
 import 'screens/main_layout.dart';
@@ -208,6 +210,15 @@ void main() async {
   try {
     WidgetsFlutterBinding.ensureInitialized();
     
+    // Initialisieren von EasyLocalization
+    try {
+      await EasyLocalization.ensureInitialized();
+      print('✅ EasyLocalization erfolgreich initialisiert');
+    } catch (e) {
+      print('⚠️ Fehler bei der Initialisierung von EasyLocalization: $e');
+      // Fahre trotzdem fort, um andere Funktionen zu ermöglichen
+    }
+    
     // Firebase initialisieren
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform
@@ -224,9 +235,21 @@ void main() async {
     
     // Initialisiere das Datum-Format für die deutsche Lokalisierung
     await initializeDateFormatting('de_DE', null);
+    // Initialisiere auch die englische Lokalisierung
+    await initializeDateFormatting('en_US', null);
     
-    // Starte die App
-    runApp(const MyApp());
+    // Starte die App mit EasyLocalization
+    runApp(
+      EasyLocalization(
+        supportedLocales: const [
+          Locale('de'),
+          Locale('en'),
+        ],
+        path: 'assets/translations',
+        fallbackLocale: const Locale('de'),
+        child: const MyApp(),
+      ),
+    );
   } catch (e, stackTrace) {
     print('❌ Kritischer Fehler beim Starten der App: $e');
     print('Stacktrace: $stackTrace');
@@ -261,16 +284,42 @@ Future<void> initFirebaseMessaging() async {
       sound: true,
     );
     
-    // Aktuelles FCM-Token abrufen
-    String? token = await messaging.getToken();
-    if (token != null) {
-      print('📱 FCM-Token: ${token.substring(0, 20)}...');
-      
-      // Wenn ein Benutzer angemeldet ist, Token mit der Benutzer-ID speichern
-      final currentUser = authService.currentUser;
-      if (currentUser != null) {
-        await timeEntryService.saveFCMToken(currentUser.uid, token);
+    // Aktuelles FCM-Token abrufen - mit Fehlerbehandlung
+    try {
+      // Plattformspezifische Behandlung für iOS
+      if (Platform.isIOS) {
+        // Für iOS: Warten auf APNS-Token
+        try {
+          final apnsToken = await messaging.getAPNSToken();
+          if (apnsToken == null) {
+            print('⚠️ APNS-Token ist nicht verfügbar, warte auf nächsten App-Start');
+            // Fahre fort ohne FCM-Token zu setzen
+            return;
+          }
+          print('✅ APNS-Token erfolgreich abgerufen');
+        } catch (e) {
+          print('⚠️ Fehler beim Abrufen des APNS-Tokens: $e');
+          // Fahre fort ohne FCM-Token zu setzen
+          return;
+        }
       }
+      
+      String? token = await messaging.getToken();
+      if (token != null) {
+        print('📱 FCM-Token: ${token.substring(0, 20)}...');
+        
+        // Wenn ein Benutzer angemeldet ist, Token mit der Benutzer-ID speichern
+        final currentUser = authService.currentUser;
+        if (currentUser != null) {
+          await timeEntryService.saveFCMToken(currentUser.uid, token);
+        }
+      } else {
+        print('⚠️ FCM-Token konnte nicht abgerufen werden');
+      }
+    } catch (e, stackTrace) {
+      print('⚠️ Fehler beim Abrufen des FCM-Tokens: $e');
+      print('Stacktrace: $stackTrace');
+      // Fahre mit der App-Initialisierung fort, auch wenn das Token nicht abgerufen werden konnte
     }
     
     // Auf Token-Aktualisierungen reagieren
@@ -523,10 +572,39 @@ class MyApp extends StatelessWidget {
         themeMode = ThemeMode.system;
     }
     
+    // Aktuelle Sprache aus den Einstellungen
+    final currentLanguage = settingsService.language;
+    
+    // Setze die Sprache basierend auf den gespeicherten Einstellungen
+    try {
+      if (context.locale.languageCode != currentLanguage) {
+        Future.microtask(() {
+          try {
+            context.setLocale(Locale(currentLanguage));
+          } catch (e) {
+            print('⚠️ Fehler beim Setzen der Sprache: $e');
+          }
+        });
+      }
+    } catch (e) {
+      print('⚠️ Fehler beim Zugriff auf die Locale: $e');
+    }
+    
     return MaterialApp.router(
       title: 'TimeTrackerApp',
       debugShowCheckedModeBanner: false,
       routerConfig: _router,
+      
+      // Lokalisierung mit EasyLocalization konfigurieren
+      localizationsDelegates: [
+        ...context.localizationDelegates,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: context.supportedLocales,
+      locale: context.locale,
+      
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: primaryColor,

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:provider/provider.dart';
-import 'package:timetrackerapp/screens/home_screen.dart';
-import 'package:timetrackerapp/screens/login_screen.dart';
+import 'screens/home_screen.dart';
+import 'screens/login_screen.dart';
 import 'providers/auth_provider.dart';
 import 'services/firebase_service.dart';
 

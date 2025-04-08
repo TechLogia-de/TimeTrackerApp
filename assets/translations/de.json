@@ -1,65 +1,11 @@
 {
-  "dashboard": "Dashboard",
-  "weeklyOverview": "Wochenübersicht",
-  "hoursPerDay": "Stunden pro Tag",
-  "today": "Heute",
-  "hours": "Stunden",
-  "entries": "Einträge",
-  "breakMinutes": "Pausenminuten",
-  "totalThisWeek": "Gesamt diese Woche",
-  "totalThisMonth": "Gesamt diesen Monat",
-  "activeProjects": "Aktive Projekte",
-  "recentActivities": "Letzte Aktivitäten",
-  "allActivities": "Alle",
-  "noDataAvailable": "Keine Daten verfügbar",
-  "noTimeEntries": "Keine Zeiteinträge vorhanden",
-  "loadingData": "Daten werden geladen...",
-  
-  "goodMorning": "Guten Morgen",
-  "goodDay": "Guten Tag",
-  "goodEvening": "Guten Abend",
-  
-  "monday": "Mo",
-  "tuesday": "Di",
-  "wednesday": "Mi",
-  "thursday": "Do",
-  "friday": "Fr",
-  "saturday": "Sa",
-  "sunday": "So",
-  
-  "currentTimeTracking": "Aktuelle Zeiterfassung",
-  "paused": "Pausiert",
-  "running": "Läuft",
-  "since": "Seit",
-  "pause": "Pause",
-  "resume": "Fortsetzen",
-  "stop": "Beenden",
-  
-  "settings": "Einstellungen",
-  "language": "Sprache",
-  "selectLanguage": "Sprache auswählen",
-  "theme": "Thema",
-  "primaryColor": "Primäre Farbe",
-  "accentColor": "Akzentfarbe",
-  "darkMode": "Dunkelmodus",
-  "light": "Hell",
-  "dark": "Dunkel",
-  "system": "System",
-  "notifications": "Benachrichtigungen",
-  "enableNotifications": "Benachrichtigungen aktivieren",
-  "notificationsDescription": "Erhalte Erinnerungen und Timer-Updates",
-  "testNotification": "Test-Benachrichtigung senden",
-  "debugNotification": "Direkte Test-Benachrichtigung",
-  "resetSettings": "Einstellungen zurücksetzen",
-  "resetSettingsQuestion": "Möchten Sie alle Einstellungen auf die Standardwerte zurücksetzen?",
-  "reset": "Zurücksetzen",
-  "cancel": "Abbrechen",
-  "save": "Speichern",
-  "error": "Fehler",
-  "success": "Erfolg",
-  
-  "languages": {
-    "de": "Deutsch",
-    "en": "Englisch"
+  "app": {
+    "title": "TimeTrackerApp"
+  },
+  "common": {
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "delete": "Löschen",
+    "edit": "Bearbeiten"
   }
-} 
+}

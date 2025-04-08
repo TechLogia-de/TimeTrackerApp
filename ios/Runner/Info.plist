@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
@@ -22,7 +24,31 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>FirebaseAppDelegateProxyEnabled</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>NSAppleMusicUsageDescription</key>
+	<string>Nicht verwendet</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Nicht verwendet</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Nicht verwendet</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Die App benötigt Zugriff auf das lokale Netzwerk, um mit Flutter-Entwicklertools zu kommunizieren und Push-Benachrichtigungen zu ermöglichen.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_dartobservatory._tcp</string>
+	</array>
+	<key>NSMotionUsageDescription</key>
+	<string>Nicht verwendet</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Nicht verwendet</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>Nicht verwendet</string>
+	<key>NSUserNotificationUsageDescription</key>
+	<string>Wir benötigen die Erlaubnis für Benachrichtigungen, um Sie über Timer und wichtige Erinnerungen zu informieren.</string>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
@@ -41,34 +67,7 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>CADisableMinimumFrameDurationOnPhone</key>
-	<true/>
-	<key>UIApplicationSupportsIndirectInputEvents</key>
-	<true/>
-	<key>NSUserNotificationUsageDescription</key>
-	<string>Wir benötigen die Erlaubnis für Benachrichtigungen, um Sie über Timer und wichtige Erinnerungen zu informieren.</string>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>Diese Berechtigung wird nur für die Entwicklung benötigt und hat keinen Einfluss auf die Funktionalität der App.</string>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>fetch</string>
-		<string>remote-notification</string>
-	</array>
-	<key>FirebaseAppDelegateProxyEnabled</key>
-	<false/>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
-	<key>NSAppleMusicUsageDescription</key>
-	<string>Nicht verwendet</string>
-	<key>NSCalendarsUsageDescription</key>
-	<string>Nicht verwendet</string>
-	<key>NSContactsUsageDescription</key>
-	<string>Nicht verwendet</string>
-	<key>NSMotionUsageDescription</key>
-	<string>Nicht verwendet</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Nicht verwendet</string>
-	<key>NSRemindersUsageDescription</key>
-	<string>Nicht verwendet</string>
 </dict>
 </plist>
