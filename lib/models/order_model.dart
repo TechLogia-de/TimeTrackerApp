@@ -520,38 +520,54 @@ class Order {
   });
 
   factory Order.fromFirestore(fb.DocumentSnapshot doc) {
-    try {
-      final data = doc.data() as Map<String, dynamic>;
-      
-      // Sichere Konvertierung von Feldwerten mit Typprüfung
-      String safeString(dynamic value, String fieldName) {
-        if (value == null) {
-          print("⚠️ Feld '$fieldName' ist null in Dokument ${doc.id}");
-          return '';
-        }
-        
-        if (value is String) {
-          if (value.isEmpty) {
-            print("⚠️ Feld '$fieldName' ist leer (String) in Dokument ${doc.id}");
-          }
-          return value;
-        }
-        
-        if (value is List) {
-          print("⚠️ Unerwarteter Typ für Feld '$fieldName': List (erwartet: String) in Dokument ${doc.id}");
-          return value.isNotEmpty ? value.first.toString() : '';
-        }
-        
-        print("⚠️ Unerwarteter Typ für Feld '$fieldName': ${value.runtimeType} (erwartet: String) in Dokument ${doc.id}");
-        return value.toString();
+    // Hilfs-Funktion, um sicher auf Felder zuzugreifen und eine Debug-Nachricht auszugeben, wenn ein Feld fehlt
+    String safeString(dynamic value, String fieldName) {
+      if (value == null) {
+        print("⚠️ Feld '$fieldName' ist null im Dokument ${doc.id}");
+        return '';
       }
       
-      // Debug-Ausgabe für wichtige Felder
-      print("📄 Konvertiere Dokument ${doc.id} - Prüfe wichtige Felder:");
-      print("  - Kundendaten: clientId=${data['clientId']}, clientName=${data['clientName']}");
-      print("  - Projektdaten: projectId=${data['projectId']}, projectName=${data['projectName']}");
+      if (value is String) {
+        return value;
+      }
       
-      // Konvertierung von Aufgaben
+      print("⚠️ Feld '$fieldName' hat unerwarteten Typ ${value.runtimeType} im Dokument ${doc.id}");
+      return value.toString();
+    }
+    
+    try {
+      final data = doc.data() as Map<String, dynamic>?;
+      
+      if (data == null) {
+        print("❌ Dokument ${doc.id} hat keine Daten");
+        return Order(
+          id: doc.id,
+          title: 'Fehlerhafte Daten',
+          description: 'Dieses Dokument enthält keine gültigen Daten',
+          clientId: '',
+          clientName: 'Unbekannt',
+          status: OrderStatus.draft,
+          createdAt: DateTime.now(),
+          createdBy: '',
+          createdByName: '',
+          priority: OrderPriority.medium,
+          type: OrderType.other,
+          estimatedHours: 0,
+          actualHours: 0,
+          paymentStatus: PaymentStatus.unpaid,
+          tasks: [],
+          attachments: [],
+          comments: [],
+          approvalSteps: [],
+          timeEntries: [],
+          tags: [],
+        );
+      }
+      
+      print("📊 Verarbeite Auftrag mit ID: ${doc.id}");
+      print("📊 Status-Wert in der Datenbank: ${data['status']}");
+      
+      // Konvertierung von Tasks
       List<OrderTask> tasks = [];
       if (data['tasks'] != null && data['tasks'] is List) {
         for (var i = 0; i < (data['tasks'] as List).length; i++) {
@@ -561,12 +577,23 @@ class Order {
               i.toString()
             ));
           } catch (e) {
-            print("Fehler beim Parsen der Aufgabe $i: $e");
+            print("❌ Fehler beim Parsen der Aufgabe $i: $e");
           }
         }
       }
       
-      // Konvertierung von Anhängen
+      // Konvertierung von Tags (mit Fallback auf leere Liste)
+      List<String> tags = [];
+      if (data['tags'] != null) {
+        if (data['tags'] is List) {
+          tags = List<String>.from((data['tags'] as List).map((item) => item.toString()));
+        } else if (data['tags'] is String) {
+          // Für den Fall, dass Tags als Komma-getrennte Zeichenkette gespeichert sind
+          tags = (data['tags'] as String).split(',').map((tag) => tag.trim()).toList();
+        }
+      }
+      
+      // Konvertierung von Anlagen
       List<OrderAttachment> attachments = [];
       if (data['attachments'] != null && data['attachments'] is List) {
         for (var i = 0; i < (data['attachments'] as List).length; i++) {
@@ -576,7 +603,7 @@ class Order {
               i.toString()
             ));
           } catch (e) {
-            print("Fehler beim Parsen des Anhangs $i: $e");
+            print("❌ Fehler beim Parsen des Anhangs $i: $e");
           }
         }
       }
@@ -591,7 +618,7 @@ class Order {
               i.toString()
             ));
           } catch (e) {
-            print("Fehler beim Parsen des Kommentars $i: $e");
+            print("❌ Fehler beim Parsen des Kommentars $i: $e");
           }
         }
       }
@@ -606,7 +633,7 @@ class Order {
               i.toString()
             ));
           } catch (e) {
-            print("Fehler beim Parsen des Genehmigungsschritts $i: $e");
+            print("❌ Fehler beim Parsen des Genehmigungsschritts $i: $e");
           }
         }
       }
@@ -615,36 +642,38 @@ class Order {
       List<AssignedUser>? assignedUsers;
       if (data['assignedUsers'] != null && data['assignedUsers'] is List) {
         assignedUsers = [];
-        for (var i = 0; i < (data['assignedUsers'] as List).length; i++) {
-          try {
-            assignedUsers.add(AssignedUser.fromFirestore(
-              data['assignedUsers'][i] as Map<String, dynamic>, 
-              i.toString()
-            ));
-          } catch (e) {
-            print("Fehler beim Parsen des Zugewiesenen Benutzers $i: $e");
+        for (var userData in data['assignedUsers']) {
+          if (userData is Map<String, dynamic>) {
+            assignedUsers.add(AssignedUser.fromFirestore(userData, ''));
           }
         }
-      }
-      
-      // Tags konvertieren
-      List<String> tags = [];
-      if (data['tags'] != null) {
-        if (data['tags'] is List) {
-          tags = (data['tags'] as List).map((item) => item.toString()).toList();
-        } else if (data['tags'] is String) {
-          tags = [data['tags'] as String];
+        
+        if (assignedUsers.isEmpty) {
+          assignedUsers = null;
         }
       }
       
-      // Zeiteinträge werden separat geladen
+      // WICHTIG: Feldnamenkompatibilität zwischen Web- und App-Version
+      // Clientdaten aus client/customerId oder clientName/clientId extrahieren
+      final String clientId = safeString(data['clientId'] ?? data['customerId'] ?? '', 'clientId/customerId');
+      final String clientName = safeString(data['clientName'] ?? data['client'] ?? '', 'clientName/client');
+      
+      // Projektdaten aus project/projectId oder projectName/projectId extrahieren
+      final String? projectId = data['projectId'] != null ? safeString(data['projectId'], 'projectId') : null;
+      final String? projectName = data['projectName'] != null ? safeString(data['projectName'], 'projectName') :
+                                 data['project'] != null ? safeString(data['project'], 'project') : null;
+      
+      // Debug-Ausgabe für die wichtigsten Felder
+      print("👥 Client: ID=$clientId, Name=$clientName");
+      print("📁 Projekt: ID=$projectId, Name=$projectName");
+      print("📊 Status: ${data['status']} (wird konvertiert zu ${_parseOrderStatus(safeString(data['status'], 'status'))})");
       
       return Order(
         id: doc.id,
         title: safeString(data['title'], 'title'),
         description: safeString(data['description'], 'description'),
-        clientId: safeString(data['clientId'], 'clientId'),
-        clientName: safeString(data['clientName'], 'clientName'),
+        clientId: clientId,
+        clientName: clientName,
         status: _parseOrderStatus(safeString(data['status'], 'status')),
         createdAt: data['createdAt'] != null ? (data['createdAt'] as fb.Timestamp).toDate() : DateTime.now(),
         createdBy: safeString(data['createdBy'], 'createdBy'),
@@ -679,8 +708,8 @@ class Order {
         timeEntries: [], // Wird separat geladen
         departmentId: safeString(data['departmentId'], 'departmentId'),
         departmentName: safeString(data['departmentName'], 'departmentName'),
-        projectId: safeString(data['projectId'], 'projectId'),
-        projectName: safeString(data['projectName'], 'projectName'),
+        projectId: projectId,
+        projectName: projectName,
         tags: tags,
         // Neue Eigenschaften aus der Webanwendung
         teamLeadId: safeString(data['teamLeadId'], 'teamLeadId'),
@@ -897,6 +926,7 @@ class Order {
     // Normalisiere den String für besseren Vergleich
     final normalizedValue = value.toLowerCase().trim().replaceAll('-', '').replaceAll('_', '');
     
+    // Erster Versuch: exakte Entsprechung zum normalisierten Wert
     switch (normalizedValue) {
       case 'pending':
       case 'wartenaufgenehmigung':
@@ -947,37 +977,70 @@ class Order {
       case 'entwurf':
         print("✅ Status '$value' als OrderStatus.draft erkannt");
         return OrderStatus.draft;
-        
-      default:
-        print("⚠️ Unbekannter Status: '$value', versuche Teilabgleich...");
-        
-        // Prüfe, ob der String einen der bekannten Status enthält
-        if (normalizedValue.contains('pend') || normalizedValue.contains('wart') || normalizedValue.contains('ausst')) {
-          print("✅ Status enthält Teile von 'pending' - verwende OrderStatus.pending");
-          return OrderStatus.pending;
-        } else if (normalizedValue.contains('approv') || normalizedValue.contains('genehm') || normalizedValue.contains('akzept')) {
-          print("✅ Status enthält Teile von 'approved' - verwende OrderStatus.approved");
-          return OrderStatus.approved;
-        } else if (normalizedValue.contains('progress') || normalizedValue.contains('bearbeit')) {
-          print("✅ Status enthält Teile von 'inProgress' - verwende OrderStatus.inProgress");
-          return OrderStatus.inProgress;
-        } else if (normalizedValue.contains('complet') || normalizedValue.contains('abgeschl') || normalizedValue.contains('fertig') || normalizedValue.contains('done')) {
-          print("✅ Status enthält Teile von 'completed' - verwende OrderStatus.completed");
-          return OrderStatus.completed;
-        } else if (normalizedValue.contains('reject') || normalizedValue.contains('ablehn')) {
-          print("✅ Status enthält Teile von 'rejected' - verwende OrderStatus.rejected");
-          return OrderStatus.rejected;
-        } else if (normalizedValue.contains('cancel') || normalizedValue.contains('stornier') || normalizedValue.contains('abbrech')) {
-          print("✅ Status enthält Teile von 'cancelled' - verwende OrderStatus.cancelled");
-          return OrderStatus.cancelled;
-        } else if (normalizedValue.contains('assign') || normalizedValue.contains('zugewiesen')) {
-          print("✅ Status enthält Teile von 'assigned' - verwende OrderStatus.assigned");
-          return OrderStatus.assigned;
-        }
-        
-        print("⚠️ Keine Übereinstimmung gefunden, verwende OrderStatus.draft als Fallback");
-        return OrderStatus.draft;
     }
+    
+    // Zweiter Versuch: Teilzeichenketten-Suche, wenn keine exakte Übereinstimmung vorliegt
+    if (normalizedValue.contains('pending') || 
+        normalizedValue.contains('warten') || 
+        normalizedValue.contains('offen')) {
+      print("✅ Status '$value' als OrderStatus.pending erkannt (Teil-Übereinstimmung)");
+      return OrderStatus.pending;
+    }
+    
+    if (normalizedValue.contains('approved') || 
+        normalizedValue.contains('genehm') || 
+        normalizedValue.contains('accept')) {
+      print("✅ Status '$value' als OrderStatus.approved erkannt (Teil-Übereinstimmung)");
+      return OrderStatus.approved;
+    }
+    
+    if (normalizedValue.contains('progress') || 
+        normalizedValue.contains('bearbeit')) {
+      print("✅ Status '$value' als OrderStatus.inProgress erkannt (Teil-Übereinstimmung)");
+      return OrderStatus.inProgress;
+    }
+    
+    if (normalizedValue.contains('complet') || 
+        normalizedValue.contains('abgeschlossen') || 
+        normalizedValue.contains('fertig') ||
+        normalizedValue.contains('done')) {
+      print("✅ Status '$value' als OrderStatus.completed erkannt (Teil-Übereinstimmung)");
+      return OrderStatus.completed;
+    }
+    
+    if (normalizedValue.contains('reject') || 
+        normalizedValue.contains('abgelehnt')) {
+      print("✅ Status '$value' als OrderStatus.rejected erkannt (Teil-Übereinstimmung)");
+      return OrderStatus.rejected;
+    }
+    
+    if (normalizedValue.contains('cancel') || 
+        normalizedValue.contains('storniert') || 
+        normalizedValue.contains('abgebrochen')) {
+      print("✅ Status '$value' als OrderStatus.cancelled erkannt (Teil-Übereinstimmung)");
+      return OrderStatus.cancelled;
+    }
+    
+    if (normalizedValue.contains('assign') || 
+        normalizedValue.contains('zugewiesen')) {
+      print("✅ Status '$value' als OrderStatus.assigned erkannt (Teil-Übereinstimmung)");
+      return OrderStatus.assigned;
+    }
+    
+    // Dritter Versuch: Nummerische Werte, falls Status als Zahl gespeichert ist
+    if (normalizedValue.isNotEmpty && int.tryParse(normalizedValue) != null) {
+      final statusInt = int.parse(normalizedValue);
+      // Grundlegende Zuordnung: 0=draft, 1=pending, 2=approved, 3=inProgress, 4=completed, 5=rejected, 6=cancelled, 7=assigned
+      if (statusInt >= 0 && statusInt <= 7) {
+        final statusEnum = OrderStatus.values[statusInt];
+        print("✅ Status '$value' als ${statusEnum.toString()} erkannt (numerischer Wert)");
+        return statusEnum;
+      }
+    }
+    
+    // Keine passende Status-Übereinstimmung gefunden
+    print("⚠️ Unbekannter Status '$value', verwende 'draft' als Standardwert");
+    return OrderStatus.draft;
   }
 
   static OrderPriority _parseOrderPriority(String? value) {

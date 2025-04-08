@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/order_service.dart';
-import '../models/order_model.dart';
+import '../models/order_model.dart' hide Order;  // Hier verstecken wir Order aus Firebase
+import '../models/order_model.dart' as app_models;  // Importiere Order als app_models.Order
 import '../services/navigation_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/navigation/bottom_nav_bar.dart';
@@ -12,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 import '../widgets/maps/order_map_widget.dart';
+import 'package:cloud_firestore/cloud_firestore.dart' as fb_store;
 
 class OrdersScreen extends StatefulWidget {
   final User user;
@@ -38,7 +40,7 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
   
   // Zusätzliche Variablen für das vereinfachte Layout
   bool _isLoading = true;
-  List<Order> _filteredOrders = [];
+  List<app_models.Order> _filteredOrders = [];
   
   @override
   void initState() {
@@ -48,6 +50,9 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
     
     // Prüfe Benutzerrechte
     _checkUserRoles();
+    
+    // DIAGNOSE: Überprüfe Firestore-Verbindung
+    _runDatabaseDiagnostics();
     
     // Lade Aufträge
     _loadOrders();
@@ -100,16 +105,123 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
       // Warte kurz für die Animation
       await Future.delayed(Duration(milliseconds: 300));
       
-      // Lade Aufträge aus dem Service
-      List<Order> orders;
+      print("🔄 Starte _loadOrders mit zusätzlichem Fallback-Mechanismus");
       
-      // Verwende die getFilteredOrders-Methode, wenn ein Status-Filter gesetzt ist
-      if (_statusFilter != null) {
-        print("⚙️ Verwende getFilteredOrders mit Status: $_statusFilter");
-        orders = await _orderService.getFilteredOrders(status: _statusFilter).first;
-      } else {
-        print("⚙️ Verwende getOrders ohne Filter");
-        orders = await _orderService.getOrders().first;
+      bool streamLoaded = false;
+      List<app_models.Order> orders = [];
+      
+      // Erster Versuch: Versuche die Aufträge über den Stream zu laden
+      try {
+        print("⚙️ Versuch 1: Lade Aufträge über Stream-Methode");
+        
+        // Da Streams asynchron sind, benötigen wir einen Future-Wrapper
+        final completer = Completer<List<app_models.Order>>();
+        late StreamSubscription subscription;
+        
+        // Timeout für den Stream setzen
+        final timer = Timer(Duration(seconds: 5), () {
+          print("⏱️ Stream-Timeout: Stream hat nicht rechtzeitig geantwortet");
+          if (!completer.isCompleted) {
+            subscription.cancel();
+            completer.complete([]);
+          }
+        });
+        
+        // Verwende die getFilteredOrders-Methode, wenn ein Status-Filter gesetzt ist
+        if (_statusFilter != null) {
+          print("⚙️ Verwende getFilteredOrders mit Status: $_statusFilter");
+          subscription = _orderService.getFilteredOrders(status: _statusFilter).listen(
+            (streamResult) {
+              print("📦 Stream lieferte ${streamResult.length} Aufträge");
+              if (!completer.isCompleted) {
+                timer.cancel();
+                completer.complete(streamResult);
+                subscription.cancel();
+              }
+            },
+            onError: (error) {
+              print("❌ Stream-Fehler: $error");
+              if (!completer.isCompleted) {
+                timer.cancel();
+                completer.complete([]);
+                subscription.cancel();
+              }
+            }
+          );
+        } else {
+          print("⚙️ Verwende getOrders ohne Filter");
+          subscription = _orderService.getOrders().listen(
+            (streamResult) {
+              print("📦 Stream lieferte ${streamResult.length} Aufträge");
+              if (!completer.isCompleted) {
+                timer.cancel();
+                completer.complete(streamResult);
+                subscription.cancel();
+              }
+            },
+            onError: (error) {
+              print("❌ Stream-Fehler: $error");
+              if (!completer.isCompleted) {
+                timer.cancel();
+                completer.complete([]);
+                subscription.cancel();
+              }
+            }
+          );
+        }
+        
+        // Warte auf das Ergebnis vom Stream
+        orders = await completer.future;
+        
+        if (orders.isNotEmpty) {
+          print("✅ Stream-Methode erfolgreich: ${orders.length} Aufträge geladen");
+          streamLoaded = true;
+        } else {
+          print("⚠️ Stream-Methode lieferte keine Aufträge");
+        }
+      } catch (e) {
+        print("❌ Fehler beim Laden über Stream: $e");
+      }
+      
+      // Zweiter Versuch: Wenn der Stream keine Aufträge lieferte, verwende die direkte Methode
+      if (!streamLoaded) {
+        try {
+          print("⚙️ Versuch 2: Lade Aufträge über direkte Methode");
+          final directOrders = await _orderService.getOrdersDirectly();
+          
+          if (directOrders.isNotEmpty) {
+            orders = directOrders;
+            print("✅ Direkte Methode erfolgreich: ${orders.length} Aufträge geladen");
+            
+            // Lokale Filterung nach Status, wenn ein Filter angegeben wurde
+            if (_statusFilter != null) {
+              final unfiltered = orders.length;
+              print("🔍 Führe lokale Filterung für Status ${_statusFilter.toString()} durch");
+              
+              orders = orders.where((order) => order.status == _statusFilter).toList();
+              print("🔍 Filterung abgeschlossen: ${orders.length} von $unfiltered Aufträgen haben den Status ${_statusFilter.toString()}");
+            }
+          } else {
+            print("⚠️ Auch direkte Methode lieferte keine Aufträge");
+          }
+        } catch (directError) {
+          print("❌ Fehler beim direkten Laden: $directError");
+        }
+      }
+      
+      // Prüfen, ob überhaupt Daten in Firestore existieren
+      try {
+        final collectionSnapshot = await fb_store.FirebaseFirestore.instance.collection('orders').get();
+        print("📊 'orders' Collection enthält direkt abgefragt ${collectionSnapshot.docs.length} Dokumente");
+        
+        if (collectionSnapshot.docs.isEmpty && orders.isEmpty) {
+          print("⚠️ PROBLEM ERKANNT: 'orders' Collection ist leer! Es gibt keine Aufträge in der Datenbank.");
+        } else if (collectionSnapshot.docs.isNotEmpty && orders.isEmpty) {
+          print("❗ KRITISCHES PROBLEM: 'orders' Collection enthält ${collectionSnapshot.docs.length} Dokumente, aber keine konnten geladen werden!");
+          print("   Mögliche Ursachen: Fehler bei der Konvertierung oder Berechtigungsprobleme");
+        }
+      } catch (e) {
+        print("❌ Fehler bei der direkten Collection-Prüfung: $e");
       }
       
       if (mounted) {
@@ -118,23 +230,63 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
           _filteredOrders = _filterOrders(orders);
           _isLoading = false;
         });
+        
+        // Feedback für den Benutzer, falls keine Aufträge geladen werden konnten
+        if (_filteredOrders.isEmpty && orders.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Keine Aufträge mit den aktuellen Filtern gefunden')),
+          );
+        } else if (_filteredOrders.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Keine Aufträge gefunden. Wurden Aufträge in der Webanwendung erstellt?'),
+              duration: Duration(seconds: 5),
+            )
+          );
+        }
       }
-    } catch (e) {
-      print("❌ Fehler beim Laden der Aufträge: $e");
+    } catch (e, stackTrace) {
+      print("❌ Unerwarteter Fehler beim Laden der Aufträge: $e");
+      print("Stacktrace: $stackTrace");
+      
       if (mounted) {
         setState(() {
           _isLoading = false;
+          _filteredOrders = [];
         });
         
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fehler beim Laden: $e')),
+          SnackBar(
+            content: Text('Fehler beim Laden der Aufträge: $e'),
+            duration: Duration(seconds: 10),
+            action: SnackBarAction(
+              label: 'Details',
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: Text('Fehlerdetails'),
+                    content: SingleChildScrollView(
+                      child: Text('$e\n\n$stackTrace'),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: Text('Schließen'),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
         );
       }
     }
   }
   
   // Methode zum Filtern der Aufträge
-  List<Order> _filterOrders(List<Order> orders) {
+  List<app_models.Order> _filterOrders(List<app_models.Order> orders) {
     var filtered = orders;
     
     // Nach Status filtern
@@ -430,7 +582,7 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
     );
   }
   
-  Widget _buildOrderCard(BuildContext context, Order order, ThemeData theme) {
+  Widget _buildOrderCard(BuildContext context, app_models.Order order, ThemeData theme) {
     // Prüfen, ob der aktuelle Benutzer den Auftrag genehmigen kann
     final bool canApprove = isManager && order.status == OrderStatus.pending;
     
@@ -1145,7 +1297,7 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
   }
   
   // Dialog zur Genehmigung oder Ablehnung eines Auftrags (nur für Manager)
-  void _showApprovalDialog(BuildContext context, Order order, bool approve) {
+  void _showApprovalDialog(BuildContext context, app_models.Order order, bool approve) {
     if (!mounted) return;
     
     final commentsController = TextEditingController();
@@ -1438,7 +1590,7 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
   }
   
   // Dialog Header
-  Widget _buildDialogHeader(BuildContext context, Order order) {
+  Widget _buildDialogHeader(BuildContext context, app_models.Order order) {
     return Container(
       padding: EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -1497,7 +1649,7 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
   }
   
   // Übersichts-Tab
-  Widget _buildOverviewTab(BuildContext context, Order order) {
+  Widget _buildOverviewTab(BuildContext context, app_models.Order order) {
     ThemeData theme = Theme.of(context);
     
     return SingleChildScrollView(
@@ -1818,7 +1970,7 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
   }
   
   // Details-Tab
-  Widget _buildDetailsTab(BuildContext context, Order order) {
+  Widget _buildDetailsTab(BuildContext context, app_models.Order order) {
     ThemeData theme = Theme.of(context);
     
     return SingleChildScrollView(
@@ -2031,7 +2183,7 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
   }
   
   // Zeiterfassungs-Tab
-  Widget _buildTimeEntriesTab(BuildContext context, Order order) {
+  Widget _buildTimeEntriesTab(BuildContext context, app_models.Order order) {
     ThemeData theme = Theme.of(context);
     
     return order.timeEntries.isEmpty
@@ -2138,7 +2290,7 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
   }
   
   // Aktionsbereich am unteren Rand
-  Widget _buildActionArea(BuildContext context, Order order) {
+  Widget _buildActionArea(BuildContext context, app_models.Order order) {
     return Container(
       padding: EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -2175,7 +2327,7 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
   }
   
   // Neue Hilfsmethode für statusspezifische Aktionen
-  Widget _buildStatusSpecificActions(BuildContext context, Order order) {
+  Widget _buildStatusSpecificActions(BuildContext context, app_models.Order order) {
     final bool isUserTeamLead = order.teamLeadId == widget.user.uid;
     
     switch (order.status) {
@@ -2362,7 +2514,7 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
   String get _currentUserId => widget.user.uid;
   
   // Dialog zum Ablehnen eines Auftrags
-  void _showRejectOrderDialog(BuildContext context, Order order) {
+  void _showRejectOrderDialog(BuildContext context, app_models.Order order) {
     if (!mounted) return;
     
     final reasonController = TextEditingController();
@@ -2671,8 +2823,18 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
     );
   }
 
-  void _showAddTimeEntryDialog(BuildContext context, Order order) {
+  void _showAddTimeEntryDialog(BuildContext context, app_models.Order order) {
     if (!mounted) return;
+    
+    // Prüfen, ob der Benutzer Teamleiter ist
+    final bool isTeamLead = _isUserTeamLeadOfOrder(order);
+    
+    if (!isTeamLead) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Nur der Teamleiter darf Zeiten für den Auftrag erfassen')),
+      );
+      return;
+    }
     
     final currentContext = context;
     final hoursController = TextEditingController(text: '1.0');
@@ -2683,13 +2845,45 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
     
     String? selectedTeamMember;
     
-    // Teammember-Mock-Daten
-    final teamMembers = [
-      {'id': 'user1', 'name': 'Max Mustermann'},
-      {'id': 'user2', 'name': 'Anna Schmidt'},
-      {'id': 'user3', 'name': 'Tom Meyer'},
-      {'id': widget.user.uid, 'name': widget.user.displayName ?? 'Aktueller Benutzer'},
-    ];
+    // Teammitglieder aus dem Auftrag extrahieren
+    final List<Map<String, dynamic>> teamMembers = [];
+    
+    // Alte Struktur prüfen
+    if (order.assignedTo != null && order.assignedToName != null) {
+      if (order.assignedTo is String && order.assignedToName is String) {
+        teamMembers.add({
+          'id': order.assignedTo,
+          'name': order.assignedToName,
+        });
+      } else if (order.assignedTo is List && order.assignedToName is List) {
+        for (int i = 0; i < (order.assignedTo as List).length; i++) {
+          if (i < (order.assignedToName as List).length) {
+            teamMembers.add({
+              'id': (order.assignedTo as List)[i],
+              'name': (order.assignedToName as List)[i],
+            });
+          }
+        }
+      }
+    }
+    
+    // Neue Struktur prüfen
+    if (order.assignedUsers != null) {
+      for (var user in order.assignedUsers!) {
+        teamMembers.add({
+          'id': user.userId,
+          'name': user.userName,
+        });
+      }
+    }
+    
+    // Wenn keine Teammitglieder gefunden wurden, Fehler anzeigen
+    if (teamMembers.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Keine Teammitglieder für diesen Auftrag gefunden')),
+      );
+      return;
+    }
     
     showDialog(
       context: currentContext,
@@ -2706,15 +2900,15 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
                   border: OutlineInputBorder(),
                 ),
                 items: teamMembers.map((member) => 
-                  DropdownMenuItem(
-                    value: member['id'],
-                    child: Text(member['name']!),
+                  DropdownMenuItem<String>(
+                    value: member['id'] as String,
+                    child: Text(member['name'] as String),
                   )
                 ).toList(),
                 onChanged: (value) {
                   selectedTeamMember = value;
                 },
-                value: widget.user.uid,
+                value: teamMembers.isNotEmpty ? teamMembers[0]['id'] as String : null,
               ),
               SizedBox(height: 16),
               TextField(
@@ -2779,10 +2973,31 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
           ),
           ElevatedButton(
             onPressed: () async {
-              final reason = descriptionController.text.trim();
-              if (reason.isEmpty) {
+              final notes = descriptionController.text.trim();
+              if (notes.isEmpty) {
                 ScaffoldMessenger.of(dialogContext).showSnackBar(
                   SnackBar(content: Text('Bitte geben Sie eine Beschreibung ein')),
+                );
+                return;
+              }
+              
+              // Zeit überprüfen
+              final hoursText = hoursController.text.trim();
+              double hours = 0;
+              try {
+                hours = double.parse(hoursText.replaceAll(',', '.'));
+                if (hours <= 0) throw FormatException('Zeit muss größer als 0 sein');
+              } catch (e) {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  SnackBar(content: Text('Bitte geben Sie eine gültige Stundenanzahl ein')),
+                );
+                return;
+              }
+              
+              // Teammitglied prüfen
+              if (selectedTeamMember == null) {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  SnackBar(content: Text('Bitte wählen Sie ein Teammitglied aus')),
                 );
                 return;
               }
@@ -2792,10 +3007,42 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
               
               if (!mounted) return;
               
-              // Hier würde normalerweise die Zeiterfassung gespeichert werden
-              ScaffoldMessenger.of(currentContext).showSnackBar(
-                SnackBar(content: Text('Zeit erfolgreich erfasst')),
-              );
+              try {
+                // Ladeanimation anzeigen
+                showDialog(
+                  context: currentContext,
+                  barrierDismissible: false,
+                  builder: (context) => Center(child: CircularProgressIndicator()),
+                );
+                
+                // Zeit erfassen
+                await _orderService.addTimeEntryAsTeamLead(
+                  order.id!,
+                  selectedTeamMember!,
+                  hours,
+                  notes,
+                  isTeamLead
+                );
+                
+                // Ladeanimation schließen
+                Navigator.of(currentContext).pop();
+                
+                // Erfolg anzeigen
+                ScaffoldMessenger.of(currentContext).showSnackBar(
+                  SnackBar(content: Text('Zeit erfolgreich erfasst')),
+                );
+                
+                // UI aktualisieren
+                _loadOrders();
+              } catch (e) {
+                // Ladeanimation schließen
+                Navigator.of(currentContext).pop();
+                
+                // Fehler anzeigen
+                ScaffoldMessenger.of(currentContext).showSnackBar(
+                  SnackBar(content: Text('Fehler: $e')),
+                );
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Theme.of(dialogContext).colorScheme.primary,
@@ -2808,8 +3055,56 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
     );
   }
 
-  void _showCompleteOrderDialog(BuildContext context, Order order) {
+  void _showCompleteOrderDialog(BuildContext context, app_models.Order order) {
     if (!mounted) return;
+    
+    // Prüfen, ob der Benutzer Teamleiter ist
+    final bool isTeamLead = _isUserTeamLeadOfOrder(order);
+    
+    if (!isTeamLead) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Nur der Teamleiter darf den Auftrag abschließen')),
+      );
+      return;
+    }
+    
+    // Prüfen, ob für alle Teammitglieder Zeiten erfasst wurden
+    bool allTimesRecorded = true;
+    String missingTimeMembers = "";
+    
+    if (order.assignedUsers != null) {
+      for (var user in order.assignedUsers!) {
+        // Überprüfen, ob bereits Zeiten erfasst wurden
+        // Annahme: timeSpent ist im metadata-Map gespeichert
+        var timeSpent = 0.0;
+        
+        if (user.id != null && order.timeEntries.isNotEmpty) {
+          // Suche nach Zeiteinträgen für diesen Benutzer
+          var userEntries = order.timeEntries.where((entry) => entry.userId == user.userId);
+          if (userEntries.isNotEmpty) {
+            timeSpent = userEntries.fold(0.0, (sum, entry) => sum + entry.hours);
+          }
+        }
+        
+        if (timeSpent <= 0) {
+          allTimesRecorded = false;
+          missingTimeMembers += "- ${user.userName}\n";
+        }
+      }
+    }
+    
+    if (!allTimesRecorded) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Bitte erfassen Sie zuerst Zeiten für alle Teammitglieder:\n$missingTimeMembers'),
+          duration: Duration(seconds: 5),
+        ),
+      );
+      
+      // Dialog zur Zeiterfassung anzeigen
+      _showAddTimeEntryDialog(context, order);
+      return;
+    }
     
     final currentContext = context;
     final completionNotes = TextEditingController();
@@ -2822,7 +3117,7 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Bitte geben Sie eine abschließende Notiz ein:'),
+            Text('Alle Zeiten wurden erfasst. Möchten Sie den Auftrag jetzt abschließen?'),
             SizedBox(height: 16),
             TextField(
               controller: completionNotes,
@@ -2854,8 +3149,6 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
               
               if (!mounted) return;
               
-              // Hier würde normalerweise der Auftrag abgeschlossen werden
-              // Mit mounted-Check nach der asynchronen Operation
               try {
                 // Lade-Dialog anzeigen
                 showDialog(
@@ -2864,28 +3157,28 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
                   builder: (context) => Center(child: CircularProgressIndicator()),
                 );
                 
-                // Simuliere Netzwerkverzögerung
-                await Future.delayed(Duration(seconds: 1));
-                
-                if (!mounted) return;
+                // Auftrag abschließen
+                await _orderService.completeOrderAsTeamLead(
+                  order.id!,
+                  widget.user.uid,
+                  notes
+                );
                 
                 // Lade-Dialog schließen
-                try {
-                  Navigator.of(currentContext).pop();
-                } catch (_) {}
+                Navigator.of(currentContext).pop();
                 
                 // Erfolgsmeldung anzeigen
                 ScaffoldMessenger.of(currentContext).showSnackBar(
                   SnackBar(content: Text('Auftrag erfolgreich abgeschlossen')),
                 );
+                
+                // UI aktualisieren
+                _loadOrders();
               } catch (e) {
-                if (!mounted) return;
-                
                 // Lade-Dialog schließen
-                try {
-                  Navigator.of(currentContext).pop();
-                } catch (_) {}
+                Navigator.of(currentContext).pop();
                 
+                // Fehlermeldung anzeigen
                 ScaffoldMessenger.of(currentContext).showSnackBar(
                   SnackBar(content: Text('Fehler: $e')),
                 );
@@ -2926,12 +3219,106 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
   bool get wantKeepAlive => true;
 
   // Neuer Tab für die Karte - jetzt viel einfacher mit dem ausgelagerten Widget
-  Widget _buildMapsTab(BuildContext context, Order order) {
+  Widget _buildMapsTab(BuildContext context, app_models.Order order) {
     return OrderMapWidget(order: order);
   }
   
   // Hilfsmethode zum Öffnen von Google Maps - nutze jetzt die statische Methode aus dem OrderMapWidget
   Future<void> _openInMaps(String address) async {
     await OrderMapWidget.openInMaps(address);
+  }
+
+  // Methode zum Überprüfen, ob der aktuelle Benutzer der Teamleiter eines Auftrags ist
+  bool _isUserTeamLeadOfOrder(app_models.Order order) {
+    // Prüfen, ob die assignedUsers existieren
+    if (order.assignedUsers == null || order.assignedUsers!.isEmpty) {
+      // Alte Struktur prüfen: Ist der Benutzer der in teamLeadId angegebene?
+      return order.teamLeadId == widget.user.uid;
+    }
+    
+    // Neue Struktur: Prüfen, ob der Benutzer in assignedUsers als Teamleiter markiert ist
+    for (var user in order.assignedUsers!) {
+      if (user.userId == widget.user.uid && user.isTeamLead) {
+        return true;
+      }
+    }
+    return false;
+  }
+  
+  // Methode zum Setzen eines Auftrags in Bearbeitung (nur für Teamleiter)
+  Future<void> _setOrderInProgress(app_models.Order order) async {
+    if (!_isUserTeamLeadOfOrder(order)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Nur der Teamleiter darf den Auftrag in Bearbeitung setzen')),
+      );
+      return;
+    }
+    
+    try {
+      // Ladeanimation anzeigen
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => Center(child: CircularProgressIndicator()),
+      );
+      
+      // Auftrag in Bearbeitung setzen
+      await _orderService.startProcessingOrder(order.id!, widget.user.uid);
+      
+      // Ladeanimation schließen
+      Navigator.of(context).pop();
+      
+      // Erfolg anzeigen
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Auftrag erfolgreich in Bearbeitung gesetzt')),
+      );
+      
+      // UI aktualisieren
+      _loadOrders();
+    } catch (e) {
+      // Ladeanimation schließen
+      Navigator.of(context).pop();
+      
+      // Fehler anzeigen
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Fehler: $e')),
+      );
+    }
+  }
+
+  // Methode zur Diagnose der Firebase-Verbindung
+  Future<void> _runDatabaseDiagnostics() async {
+    try {
+      print("🔍 Starte Datenbankdiagnose...");
+      final diagnosticResult = await _orderService.diagnoseDatabaseConnection();
+      
+      print("📊 Diagnose-Ergebnis:");
+      print("  - Collection existiert: ${diagnosticResult['collectionExists']}");
+      print("  - Anzahl Dokumente: ${diagnosticResult['documentCount']}");
+      
+      if ((diagnosticResult['documentCount'] as int) > 0) {
+        print("  - Beispiel-Dokument-IDs: ${diagnosticResult['sampleDocumentIds']}");
+        
+        // Wenn Dokumente vorhanden sind, aber keine in der Ansicht erscheinen
+        if (_filteredOrders.isEmpty) {
+          print("⚠️ KRITISCHES PROBLEM: Dokumente existieren in der Datenbank, werden aber nicht angezeigt!");
+          print("  - Prüfe Status-Filter: $_statusFilter");
+          print("  - Prüfe View-Mode: $_viewMode");
+        }
+      } else {
+        print("⚠️ KRITISCHES PROBLEM: Keine Dokumente in der 'orders'-Collection gefunden!");
+      }
+      
+      // Prüfe Authentifizierung
+      print("  - Benutzer authentifiziert: ${diagnosticResult['userAuthenticated']}");
+      print("  - Benutzer-ID: ${diagnosticResult['userId']}");
+      
+      // Prüfe Schreibzugriff
+      print("  - Schreibzugriff erfolgreich: ${diagnosticResult['writeAccessSuccessful']}");
+      
+      print("✅ Datenbankdiagnose abgeschlossen");
+    } catch (e) {
+      print("❌ Fehler bei der Datenbankdiagnose: $e");
+    }
   }
 } 

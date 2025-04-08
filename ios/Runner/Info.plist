@@ -30,16 +30,15 @@
 	<true/>
 	<key>NSAppleMusicUsageDescription</key>
 	<string>Nicht verwendet</string>
+	<key>NSBonjourServices</key>
+	<array>
+	</array>
 	<key>NSCalendarsUsageDescription</key>
 	<string>Nicht verwendet</string>
 	<key>NSContactsUsageDescription</key>
 	<string>Nicht verwendet</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Die App benötigt Zugriff auf das lokale Netzwerk, um mit Flutter-Entwicklertools zu kommunizieren und Push-Benachrichtigungen zu ermöglichen.</string>
-	<key>NSBonjourServices</key>
-	<array>
-		<string>_dartobservatory._tcp</string>
-	</array>
+	<string>Die App verwendet keine Multicast-Netzwerkfunktionen. Lokales Netzwerk wird nur für Push-Benachrichtigungen und interne Kommunikation verwendet.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>Nicht verwendet</string>
 	<key>NSPhotoLibraryUsageDescription</key>
