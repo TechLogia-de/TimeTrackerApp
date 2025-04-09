@@ -9,9 +9,9 @@ class OrderMapWidget extends StatelessWidget {
   final Order order;
   
   const OrderMapWidget({
-    Key? key, 
+    super.key, 
     required this.order,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -26,7 +26,7 @@ class OrderMapWidget extends StatelessWidget {
       : defaultPosition;
     
     // Marker für das Projekt
-    final Completer<GoogleMapController> _controller = Completer();
+    final Completer<GoogleMapController> controller = Completer();
     final Set<Marker> markers = {
       Marker(
         markerId: MarkerId(order.id ?? "project"),
@@ -110,8 +110,8 @@ class OrderMapWidget extends StatelessWidget {
                   zoom: 14,
                 ),
                 markers: markers,
-                onMapCreated: (GoogleMapController controller) {
-                  _controller.complete(controller);
+                onMapCreated: (GoogleMapController mapController) {
+                  controller.complete(mapController);
                 },
               )
             : Center(

@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../main.dart';
 
 class AuthWrapper extends StatelessWidget {
-  const AuthWrapper({Key? key}) : super(key: key);
+  const AuthWrapper({super.key});
 
   @override
   Widget build(BuildContext context) {

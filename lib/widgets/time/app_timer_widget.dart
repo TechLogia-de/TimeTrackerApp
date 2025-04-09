@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../models/time/time_entry_model.dart';
 import '../../services/time/time_entry_service.dart';
-import 'package:intl/intl.dart';
 
 class AppTimerWidget extends StatefulWidget {
   final TimeEntry? activeTimer;
@@ -10,11 +9,11 @@ class AppTimerWidget extends StatefulWidget {
   final VoidCallback? onPauseResumePressed;
   
   const AppTimerWidget({
-    Key? key,
+    super.key,
     this.activeTimer,
     this.onStopPressed,
     this.onPauseResumePressed,
-  }) : super(key: key);
+  });
 
   @override
   State<AppTimerWidget> createState() => _AppTimerWidgetState();

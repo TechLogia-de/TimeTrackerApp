@@ -7,7 +7,7 @@ class HomeScreen extends StatelessWidget {
   final User user;
   final AuthService _authService = AuthService();
   
-  HomeScreen({Key? key, required this.user}) : super(key: key);
+  HomeScreen({super.key, required this.user});
 
   @override
   Widget build(BuildContext context) {

@@ -6,11 +6,6 @@ import '../models/order_model.dart' hide Order;  // Hier verstecken wir Order au
 import '../models/order_model.dart' as app_models;  // Importiere Order als app_models.Order
 import '../services/navigation_service.dart';
 import '../services/auth_service.dart';
-import '../widgets/navigation/bottom_nav_bar.dart';
-import '../widgets/navigation/app_bar.dart';
-import '../widgets/dialogs/timer_dialogs.dart';
-import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 import '../widgets/maps/order_map_widget.dart';
 import 'package:cloud_firestore/cloud_firestore.dart' as fb_store;
@@ -18,7 +13,7 @@ import 'package:cloud_firestore/cloud_firestore.dart' as fb_store;
 class OrdersScreen extends StatefulWidget {
   final User user;
   
-  const OrdersScreen({Key? key, required this.user}) : super(key: key);
+  const OrdersScreen({super.key, required this.user});
 
   @override
   State<OrdersScreen> createState() => _OrdersScreenState();
@@ -945,7 +940,7 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
                           Container(
                             padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                             decoration: BoxDecoration(
-                              color: theme.colorScheme.surfaceVariant,
+                              color: theme.colorScheme.surfaceContainerHighest,
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
@@ -1526,7 +1521,7 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
                       
                       // Tab Content
                       Flexible(
-                        child: Container(
+                        child: SizedBox(
                           height: MediaQuery.of(dialogContext).size.height * 0.5,
                           child: TabBarView(
                             children: [
@@ -2132,7 +2127,7 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
                           ],
                         ),
                       ),
-                    ).toList(),
+                    ),
                   ],
                 ),
               ),
@@ -2166,7 +2161,7 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
                       children: order.tags.map((tag) => 
                         Chip(
                           label: Text(tag),
-                          backgroundColor: theme.colorScheme.surfaceVariant,
+                          backgroundColor: theme.colorScheme.surfaceContainerHighest,
                           labelStyle: TextStyle(
                             color: theme.colorScheme.onSurfaceVariant,
                           ),

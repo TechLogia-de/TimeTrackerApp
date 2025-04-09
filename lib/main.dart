@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:easy_localization/easy_localization.dart';
@@ -11,6 +10,7 @@ import 'screens/auth_wrapper.dart';
 import 'screens/main_layout.dart';
 import 'screens/login_screen.dart';
 import 'screens/admin/time_approval_screen.dart';
+import 'screens/shifts_screen.dart';
 import 'services/customer_service.dart';
 import 'services/project_service.dart';
 import 'services/auth_service.dart';
@@ -18,7 +18,6 @@ import 'services/settings_service.dart';
 import 'services/time/time_entry_service.dart';
 import 'dart:io';
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
@@ -179,6 +178,21 @@ final _router = GoRouter(
               user: user,
               initialTab: 3,
             );
+          }
+        ),
+      ),
+    ),
+    GoRoute(
+      path: '/shifts',
+      pageBuilder: (context, state) => NoTransitionPage<void>(
+        key: state.pageKey,
+        child: Builder(
+          builder: (context) {
+            final user = authService.currentUser;
+            // Fallback zur AuthWrapper wenn kein Benutzer da ist
+            if (user == null) return AuthWrapper();
+            
+            return ShiftsScreen(user: user);
           }
         ),
       ),
@@ -464,7 +478,7 @@ Future<void> _createNotificationChannels(FlutterLocalNotificationsPlugin plugin)
 
 // Fallback-App bei kritischen Fehlern
 class ErrorFallbackApp extends StatelessWidget {
-  const ErrorFallbackApp({Key? key}) : super(key: key);
+  const ErrorFallbackApp({super.key});
 
   @override
   Widget build(BuildContext context) {

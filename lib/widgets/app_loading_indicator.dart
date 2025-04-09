@@ -4,9 +4,9 @@ class AppLoadingIndicator extends StatelessWidget {
   final String? message;
   
   const AppLoadingIndicator({
-    Key? key,
+    super.key,
     this.message,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

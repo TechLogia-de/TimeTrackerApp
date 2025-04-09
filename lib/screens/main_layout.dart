@@ -6,7 +6,6 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../widgets/navigation/bottom_nav_bar.dart';
 import '../widgets/navigation/app_bar.dart';
 import '../services/auth_service.dart';
-import '../widgets/dialogs/timer_dialogs.dart';
 import '../services/time/time_entry_service.dart';
 import '../models/time/time_entry_model.dart';
 import '../widgets/time/app_timer_widget.dart';
@@ -23,10 +22,10 @@ class MainLayout extends StatefulWidget {
   final int initialTab;
   
   const MainLayout({
-    Key? key, 
+    super.key, 
     required this.user,
     this.initialTab = 0,
-  }) : super(key: key);
+  });
 
   @override
   MainLayoutState createState() => MainLayoutState();
@@ -468,6 +467,14 @@ class MainLayoutState extends State<MainLayout> with SingleTickerProviderStateMi
                   _onTabTapped(2);
                 },
               ),
+              ListTile(
+                leading: const Icon(Icons.calendar_month),
+                title: const Text('Schichtplan'),
+                onTap: () {
+                  Navigator.pop(context); // Drawer schließen
+                  GoRouter.of(context).go('/shifts');
+                },
+              ),
               const Divider(),
               // Zeige Admin-Funktionen nur für bestimmte Email-Domänen
               if (_isAdmin())
@@ -653,10 +660,8 @@ class MainLayoutState extends State<MainLayout> with SingleTickerProviderStateMi
   // Prüft, ob es neue genehmigte Zeiteinträge gibt
   Future<void> _checkForApprovedEntries() async {
     try {
-      if (widget.user != null) {
-        await _timeEntryService.checkForApprovedEntries(widget.user.uid);
-      }
-    } catch (e) {
+      await _timeEntryService.checkForApprovedEntries(widget.user.uid);
+        } catch (e) {
       print('Fehler bei der Prüfung auf genehmigte Zeiteinträge: $e');
     }
   }

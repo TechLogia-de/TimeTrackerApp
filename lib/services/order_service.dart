@@ -330,7 +330,7 @@ class OrderService {
     print("👥 Kundendaten: clientId=${rawData?['clientId']}, clientName=${rawData?['clientName']}");
     print("📁 Projektdaten: projectId=${rawData?['projectId']}, projectName=${rawData?['projectName']}");
     
-    Order order = Order.fromFirestore(docSnapshot as fb.DocumentSnapshot);
+    Order order = Order.fromFirestore(docSnapshot);
     print("✅ Auftrag aus Firestore geladen: id=${order.id}, title=${order.title}");
     print("👥 Kundendaten nach Konvertierung: clientId=${order.clientId}, clientName=${order.clientName}");
     print("📁 Projektdaten nach Konvertierung: projectId=${order.projectId}, projectName=${order.projectName}");
@@ -562,7 +562,7 @@ class OrderService {
     // Gesamtstunden im Auftrag aktualisieren
     final orderDoc = await _ordersCollection.doc(orderId).get();
     if (orderDoc.exists) {
-      final order = Order.fromFirestore(orderDoc as fb.DocumentSnapshot);
+      final order = Order.fromFirestore(orderDoc);
       final newActualHours = order.actualHours + timeEntry.hours;
       
       await _ordersCollection.doc(orderId).update({
@@ -593,7 +593,7 @@ class OrderService {
     if (hoursDifference != 0) {
       final orderDoc = await _ordersCollection.doc(orderId).get();
       if (orderDoc.exists) {
-        final order = Order.fromFirestore(orderDoc as fb.DocumentSnapshot);
+        final order = Order.fromFirestore(orderDoc);
         final newActualHours = order.actualHours + hoursDifference;
         
         await _ordersCollection.doc(orderId).update({
@@ -619,7 +619,7 @@ class OrderService {
     // Gesamtstunden im Auftrag aktualisieren
     final orderDoc = await _ordersCollection.doc(orderId).get();
     if (orderDoc.exists) {
-      final order = Order.fromFirestore(orderDoc as fb.DocumentSnapshot);
+      final order = Order.fromFirestore(orderDoc);
       final newActualHours = order.actualHours - entry.hours;
       
       await _ordersCollection.doc(orderId).update({
@@ -636,7 +636,7 @@ class OrderService {
     final orderDoc = await _ordersCollection.doc(orderId).get();
     if (!orderDoc.exists) throw Exception('Auftrag nicht gefunden');
     
-    final order = Order.fromFirestore(orderDoc as fb.DocumentSnapshot);
+    final order = Order.fromFirestore(orderDoc);
     final tasks = List<OrderTask>.from(order.tasks);
     tasks.add(task);
     
@@ -659,7 +659,7 @@ class OrderService {
     final orderDoc = await _ordersCollection.doc(orderId).get();
     if (!orderDoc.exists) throw Exception('Auftrag nicht gefunden');
     
-    final order = Order.fromFirestore(orderDoc as fb.DocumentSnapshot);
+    final order = Order.fromFirestore(orderDoc);
     final taskIndex = int.tryParse(task.id!);
     
     if (taskIndex == null || taskIndex < 0 || taskIndex >= order.tasks.length) {
@@ -694,7 +694,7 @@ class OrderService {
     final orderDoc = await _ordersCollection.doc(orderId).get();
     if (!orderDoc.exists) throw Exception('Auftrag nicht gefunden');
     
-    final order = Order.fromFirestore(orderDoc as fb.DocumentSnapshot);
+    final order = Order.fromFirestore(orderDoc);
     final taskIndex = int.tryParse(taskId);
     
     if (taskIndex == null || taskIndex < 0 || taskIndex >= order.tasks.length) {
@@ -721,7 +721,7 @@ class OrderService {
     final orderDoc = await _ordersCollection.doc(orderId).get();
     if (!orderDoc.exists) throw Exception('Auftrag nicht gefunden');
     
-    final order = Order.fromFirestore(orderDoc as fb.DocumentSnapshot);
+    final order = Order.fromFirestore(orderDoc);
     final comments = List<OrderComment>.from(order.comments);
     comments.add(comment);
     
@@ -738,7 +738,7 @@ class OrderService {
     final orderDoc = await _ordersCollection.doc(orderId).get();
     if (!orderDoc.exists) throw Exception('Auftrag nicht gefunden');
     
-    final order = Order.fromFirestore(orderDoc as fb.DocumentSnapshot);
+    final order = Order.fromFirestore(orderDoc);
     final steps = List<ApprovalStep>.from(order.approvalSteps);
     
     // Prüfen, ob die Sequenz bereits existiert
@@ -764,7 +764,7 @@ class OrderService {
     final orderDoc = await _ordersCollection.doc(orderId).get();
     if (!orderDoc.exists) throw Exception('Auftrag nicht gefunden');
     
-    final order = Order.fromFirestore(orderDoc as fb.DocumentSnapshot);
+    final order = Order.fromFirestore(orderDoc);
     
     if (order.status != OrderStatus.draft) {
       throw Exception('Nur Aufträge im Entwurfsstatus können zur Genehmigung eingereicht werden');
@@ -1088,7 +1088,7 @@ class OrderService {
     final orderDoc = await _ordersCollection.doc(orderId).get();
     if (!orderDoc.exists) throw Exception('Auftrag nicht gefunden');
     
-    final order = Order.fromFirestore(orderDoc as fb.DocumentSnapshot);
+    final order = Order.fromFirestore(orderDoc);
     
     if (order.status != OrderStatus.pending) {
       throw Exception('Nur Aufträge im Status "Warten auf Genehmigung" können genehmigt werden');
@@ -1139,7 +1139,7 @@ class OrderService {
     final orderDoc = await _ordersCollection.doc(orderId).get();
     if (!orderDoc.exists) throw Exception('Auftrag nicht gefunden');
     
-    final order = Order.fromFirestore(orderDoc as fb.DocumentSnapshot);
+    final order = Order.fromFirestore(orderDoc);
     
     if (order.status != OrderStatus.approved) {
       throw Exception('Nur genehmigte Aufträge können in Bearbeitung gesetzt werden');
@@ -1159,7 +1159,7 @@ class OrderService {
     final orderDoc = await _ordersCollection.doc(orderId).get();
     if (!orderDoc.exists) throw Exception('Auftrag nicht gefunden');
     
-    final order = Order.fromFirestore(orderDoc as fb.DocumentSnapshot);
+    final order = Order.fromFirestore(orderDoc);
     
     if (order.status != OrderStatus.inProgress) {
       throw Exception('Nur Aufträge in Bearbeitung können abgeschlossen werden');
@@ -1198,7 +1198,7 @@ class OrderService {
     final orderDoc = await _ordersCollection.doc(orderId).get();
     if (!orderDoc.exists) throw Exception('Auftrag nicht gefunden');
     
-    final order = Order.fromFirestore(orderDoc as fb.DocumentSnapshot);
+    final order = Order.fromFirestore(orderDoc);
     
     if (order.status == OrderStatus.completed) {
       throw Exception('Abgeschlossene Aufträge können nicht storniert werden');
@@ -1294,7 +1294,7 @@ class OrderService {
       print('Auftrag $orderId wurde in Bearbeitung gesetzt');
     } catch (e) {
       print('Fehler beim in Bearbeitung setzen des Auftrags: $e');
-      throw e;
+      rethrow;
     }
   }
   
@@ -1387,7 +1387,7 @@ class OrderService {
       print('Zeiteintrag für Benutzer $userId in Auftrag $orderId hinzugefügt');
     } catch (e) {
       print('Fehler beim Hinzufügen des Zeiteintrags: $e');
-      throw e;
+      rethrow;
     }
   }
   
@@ -1418,7 +1418,7 @@ class OrderService {
       print('Zeiteintrag für Auftrag $orderId erstellt');
     } catch (e) {
       print('Fehler beim Erstellen des Zeiteintrags: $e');
-      throw e;
+      rethrow;
     }
   }
   
@@ -1498,7 +1498,7 @@ class OrderService {
       print('Auftrag $orderId wurde abgeschlossen');
     } catch (e) {
       print('Fehler beim Abschließen des Auftrags: $e');
-      throw e;
+      rethrow;
     }
   }
   

@@ -17,12 +17,12 @@ class AppTopBar extends StatefulWidget implements PreferredSizeWidget {
   final List<Widget>? actions;
 
   const AppTopBar({
-    Key? key,
+    super.key,
     required this.user,
     this.authService,
     this.title,
     this.actions,
-  }) : super(key: key);
+  });
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);

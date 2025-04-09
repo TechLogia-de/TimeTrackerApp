@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:lottie/lottie.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'dart:math' as math;
 import 'package:go_router/go_router.dart';
@@ -9,17 +7,13 @@ import '../services/auth_service.dart';
 import '../services/navigation_service.dart';
 import '../services/time/time_entry_service.dart';
 import '../models/time/time_entry_model.dart';
-import '../widgets/navigation/bottom_nav_bar.dart';
-import '../widgets/navigation/app_bar.dart';
-import '../widgets/dialogs/timer_dialogs.dart';
-import 'profile_screen.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
 
 class DashboardScreen extends StatefulWidget {
   final User user;
   
-  const DashboardScreen({Key? key, required this.user}) : super(key: key);
+  const DashboardScreen({super.key, required this.user});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -254,7 +248,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
   Widget _buildStatisticsRow() {
     final theme = Theme.of(context);
     
-    return Container(
+    return SizedBox(
       height: 100,
       child: ListView(
         scrollDirection: Axis.horizontal,

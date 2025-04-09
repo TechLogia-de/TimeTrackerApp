@@ -2,16 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/settings_service.dart';
-import '../main.dart';
 import '../services/time/time_entry_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   final User user;
   
   const SettingsScreen({
-    Key? key,
+    super.key,
     required this.user,
-  }) : super(key: key);
+  });
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();

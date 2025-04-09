@@ -7,9 +7,9 @@ class TimeDetailScreen extends StatefulWidget {
   final TimeEntry timeEntry;
   
   const TimeDetailScreen({
-    Key? key,
+    super.key,
     required this.timeEntry,
-  }) : super(key: key);
+  });
 
   @override
   State<TimeDetailScreen> createState() => _TimeDetailScreenState();

@@ -6,7 +6,6 @@ import '../../services/customer_service.dart';
 import '../../services/project_service.dart';
 import '../../services/time/time_entry_service.dart';
 import '../../models/time/time_entry_model.dart';
-import '../../widgets/dialogs/timer_dialogs.dart';
 import 'time_detail_screen.dart';
 
 class TimeScreen extends StatefulWidget {
@@ -15,10 +14,10 @@ class TimeScreen extends StatefulWidget {
   final Function(TimeEntry?)? onTimerStateChanged;
 
   const TimeScreen({
-    Key? key, 
+    super.key, 
     required this.user,
     this.onTimerStateChanged,
-  }) : super(key: key);
+  });
 
   @override
   TimeScreenState createState() => TimeScreenState();
@@ -73,11 +72,11 @@ class TimeScreenState extends State<TimeScreen> with AutomaticKeepAliveClientMix
   TimeEntry? _activeTimer;
   
   // Paginierung für alle Zeiteinträge
-  int _pageSize = 50;
+  final int _pageSize = 50;
   int _currentPage = 0;
   bool _hasMoreEntries = true;
   bool _isLoadingMoreEntries = false;
-  ScrollController _entriesScrollController = ScrollController();
+  final ScrollController _entriesScrollController = ScrollController();
 
   @override
   void initState() {
@@ -238,9 +237,7 @@ class TimeScreenState extends State<TimeScreen> with AutomaticKeepAliveClientMix
     setState(() {
       _isRunning = true;
       _isPaused = false;
-      if (_startTime == null) {
-        _startTime = DateTime.now(); // Nur setzen, wenn nicht bereits vorhanden
-      }
+      _startTime ??= DateTime.now();
     });
     
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -1754,7 +1751,7 @@ class TimeScreenState extends State<TimeScreen> with AutomaticKeepAliveClientMix
       
       // Summiere die Zeit pro Projekt
       for (final entry in entries) {
-        if (entry.projectId == null || entry.projectId.isEmpty) {
+        if (entry.projectId.isEmpty) {
           continue; // Überspringe Einträge ohne gültige Projekt-ID
         }
         

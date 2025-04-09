@@ -6,7 +6,7 @@ import '../../services/time/time_entry_service.dart';
 import '../../widgets/app_loading_indicator.dart';
 
 class TimeApprovalScreen extends StatefulWidget {
-  const TimeApprovalScreen({Key? key}) : super(key: key);
+  const TimeApprovalScreen({super.key});
 
   @override
   State<TimeApprovalScreen> createState() => _TimeApprovalScreenState();
