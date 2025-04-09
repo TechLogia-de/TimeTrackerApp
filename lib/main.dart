@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'screens/auth_wrapper.dart';
 import 'screens/main_layout.dart';
@@ -16,6 +17,7 @@ import 'services/project_service.dart';
 import 'services/auth_service.dart';
 import 'services/settings_service.dart';
 import 'services/time/time_entry_service.dart';
+import 'providers/auth_provider.dart';
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -261,7 +263,7 @@ void main() async {
         ],
         path: 'assets/translations',
         fallbackLocale: const Locale('de'),
-        child: const MyApp(),
+        child: const TimeTrackerApp(),
       ),
     );
   } catch (e, stackTrace) {
@@ -562,116 +564,86 @@ Future<void> _checkSessionValidity() async {
   }
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+// App-Klasse aktualisieren
+class TimeTrackerApp extends StatelessWidget {
+  final ThemeMode themeMode;
+  
+  const TimeTrackerApp({
+    super.key, 
+    this.themeMode = ThemeMode.system,
+  });
 
   @override
   Widget build(BuildContext context) {
-    // Dynamische Farben aus Settings verwenden
-    final primaryColor = settingsService.themeColor;
-    final accentColor = settingsService.accentColor;
+    // Farben für die App
+    const primaryColor = Color(0xFF3370FF); // Blau
+    const accentColor = Color(0xFF6D2AFF);  // Lila
     
-    // Dunkelmodus-Einstellung auswerten
-    final darkModeValue = settingsService.darkMode;
-    ThemeMode themeMode;
-    
-    switch (darkModeValue) {
-      case 'light':
-        themeMode = ThemeMode.light;
-        break;
-      case 'dark':
-        themeMode = ThemeMode.dark;
-        break;
-      default:
-        themeMode = ThemeMode.system;
-    }
-    
-    // Aktuelle Sprache aus den Einstellungen
-    final currentLanguage = settingsService.language;
-    
-    // Setze die Sprache basierend auf den gespeicherten Einstellungen
-    try {
-      if (context.locale.languageCode != currentLanguage) {
-        Future.microtask(() {
-          try {
-            context.setLocale(Locale(currentLanguage));
-          } catch (e) {
-            print('⚠️ Fehler beim Setzen der Sprache: $e');
-          }
-        });
-      }
-    } catch (e) {
-      print('⚠️ Fehler beim Zugriff auf die Locale: $e');
-    }
-    
-    return MaterialApp.router(
-      title: 'TimeTrackerApp',
-      debugShowCheckedModeBanner: false,
-      routerConfig: _router,
-      
-      // Lokalisierung mit EasyLocalization konfigurieren
-      localizationsDelegates: [
-        ...context.localizationDelegates,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
       ],
-      supportedLocales: context.supportedLocales,
-      locale: context.locale,
-      
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: primaryColor,
-          brightness: Brightness.light,
-          primary: primaryColor,
-          secondary: accentColor,
-        ),
-        textTheme: GoogleFonts.poppinsTextTheme(),
-        useMaterial3: true,
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
+      child: MaterialApp.router(
+        title: 'TimeTracker',
+        localizationsDelegates: context.localizationDelegates,
+        supportedLocales: context.supportedLocales,
+        locale: context.locale,
+        debugShowCheckedModeBanner: false,
+        routerConfig: _router,
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: primaryColor,
+            brightness: Brightness.light,
+            primary: primaryColor,
+            secondary: accentColor,
+          ),
+          textTheme: GoogleFonts.poppinsTextTheme(),
+          useMaterial3: true,
+          elevatedButtonTheme: ElevatedButtonThemeData(
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
           ),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10.0),
+          inputDecorationTheme: InputDecorationTheme(
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10.0),
+            ),
+            filled: true,
+            fillColor: Colors.grey.shade100,
           ),
-          filled: true,
-          fillColor: Colors.grey.shade100,
         ),
-      ),
-      darkTheme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: primaryColor,
-          brightness: Brightness.dark,
-          primary: primaryColor,
-          secondary: accentColor,
-        ),
-        textTheme: GoogleFonts.poppinsTextTheme(
-          ThemeData.dark().textTheme,
-        ),
-        useMaterial3: true,
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
+        darkTheme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: primaryColor,
+            brightness: Brightness.dark,
+            primary: primaryColor,
+            secondary: accentColor,
+          ),
+          textTheme: GoogleFonts.poppinsTextTheme(
+            ThemeData.dark().textTheme,
+          ),
+          useMaterial3: true,
+          elevatedButtonTheme: ElevatedButtonThemeData(
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
           ),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10.0),
+          inputDecorationTheme: InputDecorationTheme(
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10.0),
+            ),
+            filled: true,
+            fillColor: Colors.grey.shade800,
           ),
-          filled: true,
-          fillColor: Colors.grey.shade800,
         ),
+        themeMode: themeMode,
       ),
-      themeMode: themeMode,
     );
   }
 }

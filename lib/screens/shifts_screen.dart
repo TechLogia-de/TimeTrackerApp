@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:go_router/go_router.dart';
 import '../services/shift_service.dart';
+import './availability_screen.dart';
 
 // Schicht-Modell
 class Shift {
@@ -1434,32 +1435,6 @@ class ShiftsScreenState extends State<ShiftsScreen> with SingleTickerProviderSta
   }
   
   Widget _buildAvailabilityView() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.access_time,
-            size: 64,
-            color: Colors.grey[400],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Verfügbarkeitseinstellungen werden noch implementiert',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey[600],
-            ),
-          ),
-          const SizedBox(height: 32),
-          ElevatedButton(
-            onPressed: () {
-              // Verfügbarkeiten bearbeiten (später implementieren)
-            },
-            child: const Text('Verfügbarkeit bearbeiten'),
-          ),
-        ],
-      ),
-    );
+    return const AvailabilityScreen();
   }
 } 
