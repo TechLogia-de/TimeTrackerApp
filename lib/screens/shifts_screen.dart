@@ -137,9 +137,12 @@ class ShiftsScreenState extends State<ShiftsScreen> with SingleTickerProviderSta
       // Laden der aktuellen Wochenschichten aus der Datenbank
       await _loadShiftsForCurrentWeek();
       
-      setState(() {
-        _isLoading = false;
-      });
+      // Wichtig: Prüfe, ob das Widget noch eingebunden ist, bevor setState aufgerufen wird
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     } catch (e) {
       print('Fehler beim Laden der Schichtplan-Daten: $e');
       
@@ -166,16 +169,46 @@ class ShiftsScreenState extends State<ShiftsScreen> with SingleTickerProviderSta
     final shiftsData = await _shiftService.getShiftsForDateRange(_weekStart, endOfWeek);
     
     // Schichten aus den Daten erstellen
-    setState(() {
-      _shifts = shiftsData.map((data) => Shift.fromMap(data)).toList();
-    });
+    // Wichtig: Prüfe, ob das Widget noch eingebunden ist, bevor setState aufgerufen wird
+    if (mounted) {
+      setState(() {
+        _shifts = shiftsData.map((data) => Shift.fromMap(data)).toList();
+      });
+    }
   }
   
   @override
   Widget build(BuildContext context) {
+    // Zähle ausstehende Schichten
+    final pendingShifts = _shifts.where((shift) {
+      return shift.assignedUsers.any((user) => 
+        user.userId == widget.user.uid && user.status == 'pending');
+    }).length;
+    
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Schichtplan').tr(),
+        title: Row(
+          children: [
+            const Text('Schichtplan').tr(),
+            if (pendingShifts > 0)
+              Container(
+                margin: const EdgeInsets.only(left: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '$pendingShifts',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+          ],
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
@@ -186,7 +219,37 @@ class ShiftsScreenState extends State<ShiftsScreen> with SingleTickerProviderSta
           controller: _tabController,
           tabs: [
             Tab(
-              icon: const Icon(Icons.calendar_view_week),
+              icon: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  const Icon(Icons.calendar_view_week),
+                  if (pendingShifts > 0)
+                    Positioned(
+                      right: -8,
+                      top: -8,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 16,
+                          minHeight: 16,
+                        ),
+                        child: Text(
+                          '$pendingShifts',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
               text: 'Wochenplan'.tr(),
             ),
             Tab(
@@ -378,195 +441,233 @@ class ShiftsScreenState extends State<ShiftsScreen> with SingleTickerProviderSta
           Card(
             margin: const EdgeInsets.only(bottom: 12),
             color: cardColor,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(shiftIcon, size: 20),
-                          const SizedBox(width: 8),
-                          Text(
-                            shift.title,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (userAssignment.userId.isNotEmpty)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: statusColor,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            userAssignment.status == 'accepted' ? 'Akzeptiert' :
-                            userAssignment.status == 'declined' ? 'Abgelehnt' :
-                            userAssignment.status == 'pending' ? 'Ausstehend' :
-                            'Zugewiesen',
-                            style: const TextStyle(color: Colors.white, fontSize: 12),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Icon(Icons.schedule, size: 16, color: Colors.grey),
-                      const SizedBox(width: 4),
-                      Text('${shift.startTime} - ${shift.endTime}'),
-                    ],
-                  ),
-                  
-                  if (shift.notes != null && shift.notes!.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        shift.notes!,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[700],
-                        ),
-                      ),
-                    ),
-                  ],
-                  
-                  const SizedBox(height: 12),
-                  const Divider(),
-                  const SizedBox(height: 4),
-                  
-                  Text(
-                    'Zugewiesene Mitarbeiter:',
-                    style: TextStyle(
-                      fontSize: 14, 
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey[700],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  ...shift.assignedUsers.map((user) => Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Row(
+            child: InkWell(
+              onTap: () {
+                if (userAssignment.userId.isNotEmpty && 
+                    (userAssignment.status == 'pending' || userAssignment.status == 'assigned')) {
+                  _showShiftApprovalDialog(shift);
+                }
+              },
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Row(
                           children: [
-                            CircleAvatar(
-                              radius: 12,
-                              backgroundColor: Colors.grey.shade300,
-                              child: Text(
-                                user.userName.substring(0, 1).toUpperCase(),
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(user.userName),
-                          ],
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: user.status == 'accepted' ? Colors.green : 
-                                  user.status == 'declined' ? Colors.red :
-                                  user.status == 'pending' ? Colors.amber : 
-                                  Colors.blue,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            user.status == 'accepted' ? 'Akzeptiert' :
-                            user.status == 'declined' ? 'Abgelehnt' :
-                            user.status == 'pending' ? 'Ausstehend' :
-                            'Zugewiesen',
-                            style: const TextStyle(color: Colors.white, fontSize: 10),
-                          ),
-                        ),
-                      ],
-                    ),
-                  )).toList(),
-                  
-                  if (userAssignment.userId.isNotEmpty && userAssignment.status == 'pending') ...[
-                    const SizedBox(height: 12),
-                    const Divider(),
-                    const SizedBox(height: 8),
-                    
-                    if (shift.approvalDeadline != null) ...[
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        margin: const EdgeInsets.only(bottom: 8),
-                        decoration: BoxDecoration(
-                          color: DateTime.parse(shift.approvalDeadline!).isBefore(
-                            DateTime.now().add(const Duration(days: 2))
-                          ) ? Colors.red.shade50 : Colors.amber.shade50,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: DateTime.parse(shift.approvalDeadline!).isBefore(
-                              DateTime.now().add(const Duration(days: 2))
-                            ) ? Colors.red.shade200 : Colors.amber.shade200,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.warning_amber_rounded, 
-                              size: 16, 
-                              color: DateTime.parse(shift.approvalDeadline!).isBefore(
-                                DateTime.now().add(const Duration(days: 2))
-                              ) ? Colors.red.shade700 : Colors.amber.shade700,
-                            ),
+                            Icon(shiftIcon, size: 20),
                             const SizedBox(width: 8),
                             Text(
-                              'Antwort bis: ${DateFormat('dd.MM.yyyy', context.locale.languageCode).format(DateTime.parse(shift.approvalDeadline!))}',
-                              style: TextStyle(
-                                fontSize: 12,
+                              shift.title,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (userAssignment.userId.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: statusColor,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              userAssignment.status == 'accepted' ? 'Akzeptiert' :
+                              userAssignment.status == 'declined' ? 'Abgelehnt' :
+                              userAssignment.status == 'pending' ? 'Ausstehend' :
+                              'Zugewiesen',
+                              style: const TextStyle(color: Colors.white, fontSize: 12),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Icon(Icons.schedule, size: 16, color: Colors.grey),
+                        const SizedBox(width: 4),
+                        Text('${shift.startTime} - ${shift.endTime}'),
+                      ],
+                    ),
+                    
+                    if (shift.notes != null && shift.notes!.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          shift.notes!,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                      ),
+                    ],
+                    
+                    const SizedBox(height: 12),
+                    const Divider(),
+                    const SizedBox(height: 4),
+                    
+                    Text(
+                      'Zugewiesene Mitarbeiter:',
+                      style: TextStyle(
+                        fontSize: 14, 
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[700],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ...shift.assignedUsers.map((user) => Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 12,
+                                backgroundColor: Colors.grey.shade300,
+                                child: Text(
+                                  user.userName.substring(0, 1).toUpperCase(),
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(user.userName),
+                            ],
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: user.status == 'accepted' ? Colors.green : 
+                                    user.status == 'declined' ? Colors.red :
+                                    user.status == 'pending' ? Colors.amber : 
+                                    Colors.blue,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              user.status == 'accepted' ? 'Akzeptiert' :
+                              user.status == 'declined' ? 'Abgelehnt' :
+                              user.status == 'pending' ? 'Ausstehend' :
+                              'Zugewiesen',
+                              style: const TextStyle(color: Colors.white, fontSize: 10),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )).toList(),
+                    
+                    if (userAssignment.userId.isNotEmpty && userAssignment.status == 'pending') ...[
+                      const SizedBox(height: 12),
+                      const Divider(),
+                      const SizedBox(height: 8),
+                      
+                      if (shift.approvalDeadline != null) ...[
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            color: DateTime.parse(shift.approvalDeadline!).isBefore(
+                              DateTime.now().add(const Duration(days: 2))
+                            ) ? Colors.red.shade50 : Colors.amber.shade50,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: DateTime.parse(shift.approvalDeadline!).isBefore(
+                                DateTime.now().add(const Duration(days: 2))
+                              ) ? Colors.red.shade200 : Colors.amber.shade200,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.warning_amber_rounded, 
+                                size: 16, 
                                 color: DateTime.parse(shift.approvalDeadline!).isBefore(
                                   DateTime.now().add(const Duration(days: 2))
                                 ) ? Colors.red.shade700 : Colors.amber.shade700,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Antwort bis: ${DateFormat('dd.MM.yyyy', context.locale.languageCode).format(DateTime.parse(shift.approvalDeadline!))}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: DateTime.parse(shift.approvalDeadline!).isBefore(
+                                    DateTime.now().add(const Duration(days: 2))
+                                  ) ? Colors.red.shade700 : Colors.amber.shade700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      
+                      Container(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              child: Text(
+                                'Diese Schicht benötigt Ihre Antwort:',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: ElevatedButton.icon(
+                                      onPressed: () => _acceptShift(shift.id),
+                                      icon: const Icon(Icons.check_circle, color: Colors.white),
+                                      label: const Text('Akzeptieren'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.green,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(vertical: 12),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: ElevatedButton.icon(
+                                      onPressed: () => _declineShift(shift.id),
+                                      icon: const Icon(Icons.cancel, color: Colors.white),
+                                      label: const Text('Ablehnen'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.red,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(vertical: 12),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
                         ),
                       ),
                     ],
-                    
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () => _acceptShift(shift.id),
-                            icon: const Icon(Icons.check_circle, color: Colors.green),
-                            label: const Text('Akzeptieren'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.green,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () => _declineShift(shift.id),
-                            icon: const Icon(Icons.cancel, color: Colors.red),
-                            label: const Text('Ablehnen'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.red,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
                   ],
-                ],
+                ),
               ),
             ),
           ),
@@ -586,6 +687,9 @@ class ShiftsScreenState extends State<ShiftsScreen> with SingleTickerProviderSta
       
       // Verwende ShiftService, um die Schicht in Firestore zu akzeptieren
       final success = await _shiftService.acceptShift(shiftId);
+      
+      // Wichtig: Prüfe, ob das Widget noch eingebunden ist, bevor setState aufgerufen wird
+      if (!mounted) return;
       
       if (success) {
         // Aktualisiere die lokalen Daten
@@ -628,26 +732,35 @@ class ShiftsScreenState extends State<ShiftsScreen> with SingleTickerProviderSta
           ),
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Schicht konnte nicht akzeptiert werden'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        // Nur SnackBar anzeigen, wenn das Widget noch eingebunden ist
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Schicht konnte nicht akzeptiert werden'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     } catch (e) {
       print('Fehler beim Akzeptieren der Schicht: $e');
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Fehler beim Akzeptieren der Schicht: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      // Nur SnackBar anzeigen, wenn das Widget noch eingebunden ist
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Fehler beim Akzeptieren der Schicht: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      // Nur setState aufrufen, wenn das Widget noch eingebunden ist
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
   
@@ -660,6 +773,9 @@ class ShiftsScreenState extends State<ShiftsScreen> with SingleTickerProviderSta
       
       // Verwende ShiftService, um die Schicht in Firestore abzulehnen
       final success = await _shiftService.declineShift(shiftId);
+      
+      // Wichtig: Prüfe, ob das Widget noch eingebunden ist, bevor setState aufgerufen wird
+      if (!mounted) return;
       
       if (success) {
         // Aktualisiere die lokalen Daten
@@ -702,27 +818,168 @@ class ShiftsScreenState extends State<ShiftsScreen> with SingleTickerProviderSta
           ),
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Schicht konnte nicht abgelehnt werden'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        // Nur SnackBar anzeigen, wenn das Widget noch eingebunden ist
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Schicht konnte nicht abgelehnt werden'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     } catch (e) {
       print('Fehler beim Ablehnen der Schicht: $e');
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Fehler beim Ablehnen der Schicht: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      // Nur SnackBar anzeigen, wenn das Widget noch eingebunden ist
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Fehler beim Ablehnen der Schicht: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      // Nur setState aufrufen, wenn das Widget noch eingebunden ist
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
+  }
+  
+  void _showShiftApprovalDialog(Shift shift) {
+    // Finde die Zuweisung für den aktuellen Benutzer
+    final userAssignment = shift.assignedUsers.firstWhere(
+      (a) => a.userId == widget.user.uid,
+      orElse: () => ShiftAssignment(
+        userId: '', 
+        userName: '', 
+        status: '',
+      ),
+    );
+    
+    if (userAssignment.userId.isEmpty) return;
+    
+    // Prüfe, ob das Widget noch eingebunden ist, bevor showDialog aufgerufen wird
+    if (!mounted) return;
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Schichtzuweisung'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              shift.title,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
+                const SizedBox(width: 4),
+                Text(
+                  DateFormat('EEEE, d. MMMM yyyy', context.locale.languageCode)
+                      .format(DateTime.parse(shift.date)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Icon(Icons.access_time, size: 16, color: Colors.grey),
+                const SizedBox(width: 4),
+                Text('${shift.startTime} - ${shift.endTime}'),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Möchten Sie diese Schicht annehmen oder ablehnen?',
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
+            
+            if (shift.approvalDeadline != null) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: DateTime.parse(shift.approvalDeadline!).isBefore(
+                    DateTime.now().add(const Duration(days: 2))
+                  ) ? Colors.red.shade50 : Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: DateTime.parse(shift.approvalDeadline!).isBefore(
+                      DateTime.now().add(const Duration(days: 2))
+                    ) ? Colors.red.shade200 : Colors.amber.shade200,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.warning_amber_rounded, 
+                      size: 16, 
+                      color: DateTime.parse(shift.approvalDeadline!).isBefore(
+                        DateTime.now().add(const Duration(days: 2))
+                      ) ? Colors.red.shade700 : Colors.amber.shade700,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Antwort bis: ${DateFormat('dd.MM.yyyy', context.locale.languageCode).format(DateTime.parse(shift.approvalDeadline!))}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: DateTime.parse(shift.approvalDeadline!).isBefore(
+                            DateTime.now().add(const Duration(days: 2))
+                          ) ? Colors.red.shade700 : Colors.amber.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+            child: const Text('Abbrechen'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _declineShift(shift.id);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Ablehnen'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _acceptShift(shift.id);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Annehmen'),
+          ),
+        ],
+      ),
+    );
   }
   
   Widget _buildMonthlyView() {
