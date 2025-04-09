@@ -102,6 +102,13 @@ class ShiftService {
   // Eine Schicht akzeptieren - angepasst an die Webanwendung
   Future<bool> acceptShift(String shiftId) async {
     try {
+      // Wenn die ID mit "real_" beginnt, entferne es für den Firestore-Zugriff
+      String firestoreDocId = shiftId;
+      if (shiftId.startsWith("real_")) {
+        firestoreDocId = shiftId.substring(5); // Entferne "real_"
+        print('Verwende Firestore Dokument-ID: $firestoreDocId');
+      }
+      
       // Aktuelle Benutzer-ID
       final currentUser = _auth.currentUser;
       if (currentUser == null) {
@@ -109,12 +116,12 @@ class ShiftService {
         return false;
       }
       
-      print('Versuche Schicht $shiftId zu akzeptieren für Benutzer ${currentUser.uid}');
+      print('Versuche Schicht $firestoreDocId zu akzeptieren für Benutzer ${currentUser.uid}');
       
-      // Schicht-Dokument abrufen
-      final shiftDoc = await _firestore.collection('shifts').doc(shiftId).get();
+      // Schicht-Dokument mit der korrekten ID abrufen
+      final shiftDoc = await _firestore.collection('shifts').doc(firestoreDocId).get();
       if (!shiftDoc.exists) {
-        print('Fehler: Schicht mit ID $shiftId existiert nicht');
+        print('Fehler: Schicht mit ID $firestoreDocId existiert nicht');
         return false;
       }
       
@@ -122,120 +129,82 @@ class ShiftService {
       
       final shiftData = shiftDoc.data()!;
       
-      // Vollständige Debug-Informationen zur Schicht
-      print('VOLLSTÄNDIGE SCHICHTDATEN: ${shiftData.toString()}');
-      
-      // Prüfen, ob das assignedUsers-Feld existiert und eine Liste ist
+      // Prüfen, ob das assignedUsers-Feld existiert
       if (!shiftData.containsKey('assignedUsers')) {
         print('Fehler: Das Feld "assignedUsers" existiert nicht in der Schicht');
         return false;
       }
       
-      // Die assignedUsers als Liste extrahieren und Typ prüfen
+      // Die zugewiesenen Benutzer extrahieren
       final assignedUsersRaw = shiftData['assignedUsers'];
-      print('ASSIGNED USERS RAW TYPE: ${assignedUsersRaw.runtimeType}');
-      print('ASSIGNED USERS RAW: $assignedUsersRaw');
+      print('ASSIGNED USERS TYPE: ${assignedUsersRaw.runtimeType}');
       
-      List<dynamic> rawAssignedUsers;
-      
-      if (assignedUsersRaw is List) {
-        rawAssignedUsers = assignedUsersRaw;
-      } else {
+      // Sicherstellen, dass wir mit einer Liste arbeiten
+      if (!(assignedUsersRaw is List)) {
         print('Fehler: assignedUsers ist keine Liste, sondern ${assignedUsersRaw.runtimeType}');
         return false;
       }
       
+      List<dynamic> rawAssignedUsers = assignedUsersRaw;
       print('Anzahl zugewiesener Benutzer: ${rawAssignedUsers.length}');
       
-      // Debug: Ersten Eintrag ausgeben, wenn vorhanden
-      if (rawAssignedUsers.isNotEmpty) {
-        print('Erster zugewiesener Benutzer: ${rawAssignedUsers[0]}');
-        print('Erster zugewiesener Benutzer Typ: ${rawAssignedUsers[0].runtimeType}');
-      }
+      // Liste für das Update vorbereiten
+      List<Map<String, dynamic>> assignedUsers = [];
       
-      // Kopie der Liste erstellen und in Maps umwandeln
-      final List<Map<String, dynamic>> assignedUsers = [];
-      
-      // Iteriere über alle Benutzer und sammle sie korrekt
+      // Alle Benutzer in der Liste durchgehen und korrekte Maps erstellen
       for (var user in rawAssignedUsers) {
-        try {
-          if (user is Map) {
-            // Konvertiere Map<dynamic, dynamic> zu Map<String, dynamic>
-            final Map<String, dynamic> userMap = {};
-            user.forEach((key, value) {
-              if (key is String) {
-                userMap[key] = value;
-              } else {
-                userMap[key.toString()] = value;
-              }
-            });
-            assignedUsers.add(userMap);
-          } else {
-            print('Warnung: Benutzer ist kein Map, sondern ${user.runtimeType}');
-          }
-        } catch (e) {
-          print('Fehler bei der Konvertierung eines Benutzers: $e');
+        if (user is Map) {
+          Map<String, dynamic> userMap = {};
+          user.forEach((key, value) {
+            if (key is String) {
+              userMap[key] = value;
+            } else {
+              userMap[key.toString()] = value;
+            }
+          });
+          assignedUsers.add(userMap);
+        } else {
+          print('Warnung: Ein Benutzer ist kein Map: $user');
         }
       }
       
-      // Debug: Konvertierte Liste ausgeben
-      print('KONVERTIERTE LISTE: $assignedUsers');
-      
-      // Index des aktuellen Benutzers in der Liste finden
-      final userIndex = assignedUsers.indexWhere((user) {
-        final userId = user['userId'];
-        print('Vergleiche Benutzer-ID: $userId mit ${currentUser.uid}, sind gleich? ${userId == currentUser.uid}');
-        return userId == currentUser.uid;
-      });
-      
-      print('Benutzerindex in der Liste: $userIndex');
+      // Bestehenden Benutzer finden oder neuen hinzufügen
+      int userIndex = -1;
+      for (int i = 0; i < assignedUsers.length; i++) {
+        if (assignedUsers[i]['userId'] == currentUser.uid) {
+          userIndex = i;
+          break;
+        }
+      }
       
       if (userIndex >= 0) {
-        print('Benutzer an Index $userIndex gefunden, aktueller Status: ${assignedUsers[userIndex]['status']}');
-        
-        // Benutzerstatus auf 'accepted' setzen - exakt wie in der Webanwendung
+        print('Benutzer gefunden, aktualisiere Status von "${assignedUsers[userIndex]['status']}" zu "accepted"');
+        // Status auf 'accepted' setzen
         assignedUsers[userIndex]['status'] = 'accepted';
-        
-        // Schicht aktualisieren - genau die gleiche Struktur wie vorher verwenden
-        try {
-          await _firestore.collection('shifts').doc(shiftId).update({
-            'assignedUsers': assignedUsers,
-          });
-          
-          print('Schicht erfolgreich aktualisiert');
-          return true;
-        } catch (updateError) {
-          print('Fehler beim Aktualisieren der Schicht: $updateError');
-          return false;
-        }
       } else {
-        print('Fehler: Benutzer ${currentUser.uid} ist nicht in dieser Schicht zugewiesen');
-        
-        // Debug: alle Benutzer-IDs in der Schicht ausgeben
-        print('Alle zugewiesenen Benutzer:');
-        for (var user in assignedUsers) {
-          print('Zugewiesener Benutzer ID: ${user['userId']}, Name: ${user['userName']}');
-        }
-        
-        // Möglicherweise müssen wir eine neue Zuweisung hinzufügen?
-        print('Versuche, eine neue Zuweisung zu erstellen...');
+        print('Benutzer nicht gefunden. Füge neue Zuweisung hinzu.');
+        // Neuen Benutzer hinzufügen
         assignedUsers.add({
           'userId': currentUser.uid,
           'userName': currentUser.displayName ?? 'Unbekannter Benutzer',
           'status': 'accepted',
         });
+      }
+      
+      // Schicht aktualisieren
+      try {
+        print('Aktualisiere Schicht $firestoreDocId mit ${assignedUsers.length} Zuweisungen');
+        print('Update-Daten: ${assignedUsers.toString()}');
         
-        try {
-          await _firestore.collection('shifts').doc(shiftId).update({
-            'assignedUsers': assignedUsers,
-          });
-          
-          print('Schicht erfolgreich mit neuer Benutzerzuweisung aktualisiert');
-          return true;
-        } catch (updateError) {
-          print('Fehler beim Aktualisieren der Schicht mit neuer Zuweisung: $updateError');
-          return false;
-        }
+        await _firestore.collection('shifts').doc(firestoreDocId).update({
+          'assignedUsers': assignedUsers,
+        });
+        
+        print('Schicht erfolgreich akzeptiert');
+        return true;
+      } catch (updateError) {
+        print('Fehler beim Aktualisieren der Schicht: $updateError');
+        return false;
       }
     } catch (e, stack) {
       print('Fehler beim Akzeptieren der Schicht: $e');
@@ -247,6 +216,13 @@ class ShiftService {
   // Eine Schicht ablehnen - angepasst an die Webanwendung
   Future<bool> declineShift(String shiftId) async {
     try {
+      // Wenn die ID mit "real_" beginnt, entferne es für den Firestore-Zugriff
+      String firestoreDocId = shiftId;
+      if (shiftId.startsWith("real_")) {
+        firestoreDocId = shiftId.substring(5); // Entferne "real_"
+        print('Verwende Firestore Dokument-ID: $firestoreDocId');
+      }
+      
       // Aktuelle Benutzer-ID
       final currentUser = _auth.currentUser;
       if (currentUser == null) {
@@ -254,131 +230,93 @@ class ShiftService {
         return false;
       }
       
-      print('Versuche Schicht $shiftId abzulehnen für Benutzer ${currentUser.uid}');
+      print('Versuche Schicht $firestoreDocId abzulehnen für Benutzer ${currentUser.uid}');
       
-      // Schicht-Dokument abrufen
-      final shiftDoc = await _firestore.collection('shifts').doc(shiftId).get();
+      // Schicht-Dokument mit der korrekten ID abrufen
+      final shiftDoc = await _firestore.collection('shifts').doc(firestoreDocId).get();
       if (!shiftDoc.exists) {
-        print('Fehler: Schicht mit ID $shiftId existiert nicht');
+        print('Fehler: Schicht mit ID $firestoreDocId existiert nicht');
         return false;
       }
       
       final shiftData = shiftDoc.data()!;
       
-      // Vollständige Debug-Informationen zur Schicht
-      print('VOLLSTÄNDIGE SCHICHTDATEN: ${shiftData.toString()}');
-      
-      // Prüfen, ob das assignedUsers-Feld existiert und eine Liste ist
+      // Prüfen, ob das assignedUsers-Feld existiert
       if (!shiftData.containsKey('assignedUsers')) {
         print('Fehler: Das Feld "assignedUsers" existiert nicht in der Schicht');
         return false;
       }
       
-      // Die assignedUsers als Liste extrahieren und Typ prüfen
+      // Die zugewiesenen Benutzer extrahieren
       final assignedUsersRaw = shiftData['assignedUsers'];
-      print('ASSIGNED USERS RAW TYPE: ${assignedUsersRaw.runtimeType}');
-      print('ASSIGNED USERS RAW: $assignedUsersRaw');
+      print('ASSIGNED USERS TYPE: ${assignedUsersRaw.runtimeType}');
       
-      List<dynamic> rawAssignedUsers;
-      
-      if (assignedUsersRaw is List) {
-        rawAssignedUsers = assignedUsersRaw;
-      } else {
+      // Sicherstellen, dass wir mit einer Liste arbeiten
+      if (!(assignedUsersRaw is List)) {
         print('Fehler: assignedUsers ist keine Liste, sondern ${assignedUsersRaw.runtimeType}');
         return false;
       }
       
+      List<dynamic> rawAssignedUsers = assignedUsersRaw;
       print('Anzahl zugewiesener Benutzer: ${rawAssignedUsers.length}');
       
-      // Debug: Ersten Eintrag ausgeben, wenn vorhanden
-      if (rawAssignedUsers.isNotEmpty) {
-        print('Erster zugewiesener Benutzer: ${rawAssignedUsers[0]}');
-        print('Erster zugewiesener Benutzer Typ: ${rawAssignedUsers[0].runtimeType}');
-      }
+      // Liste für das Update vorbereiten
+      List<Map<String, dynamic>> assignedUsers = [];
       
-      // Kopie der Liste erstellen und in Maps umwandeln
-      final List<Map<String, dynamic>> assignedUsers = [];
-      
-      // Iteriere über alle Benutzer und sammle sie korrekt
+      // Alle Benutzer in der Liste durchgehen und korrekte Maps erstellen
       for (var user in rawAssignedUsers) {
-        try {
-          if (user is Map) {
-            // Konvertiere Map<dynamic, dynamic> zu Map<String, dynamic>
-            final Map<String, dynamic> userMap = {};
-            user.forEach((key, value) {
-              if (key is String) {
-                userMap[key] = value;
-              } else {
-                userMap[key.toString()] = value;
-              }
-            });
-            assignedUsers.add(userMap);
-          } else {
-            print('Warnung: Benutzer ist kein Map, sondern ${user.runtimeType}');
-          }
-        } catch (e) {
-          print('Fehler bei der Konvertierung eines Benutzers: $e');
+        if (user is Map) {
+          Map<String, dynamic> userMap = {};
+          user.forEach((key, value) {
+            if (key is String) {
+              userMap[key] = value;
+            } else {
+              userMap[key.toString()] = value;
+            }
+          });
+          assignedUsers.add(userMap);
+        } else {
+          print('Warnung: Ein Benutzer ist kein Map: $user');
         }
       }
       
-      // Debug: Konvertierte Liste ausgeben
-      print('KONVERTIERTE LISTE: $assignedUsers');
-      
-      // Index des aktuellen Benutzers in der Liste finden
-      final userIndex = assignedUsers.indexWhere((user) {
-        final userId = user['userId'];
-        print('Vergleiche Benutzer-ID: $userId mit ${currentUser.uid}, sind gleich? ${userId == currentUser.uid}');
-        return userId == currentUser.uid;
-      });
-      
-      print('Benutzerindex in der Liste: $userIndex');
+      // Bestehenden Benutzer finden oder neuen hinzufügen
+      int userIndex = -1;
+      for (int i = 0; i < assignedUsers.length; i++) {
+        if (assignedUsers[i]['userId'] == currentUser.uid) {
+          userIndex = i;
+          break;
+        }
+      }
       
       if (userIndex >= 0) {
-        print('Benutzer an Index $userIndex gefunden, aktueller Status: ${assignedUsers[userIndex]['status']}');
-        
-        // Benutzerstatus auf 'declined' setzen - exakt wie in der Webanwendung
+        print('Benutzer gefunden, aktualisiere Status von "${assignedUsers[userIndex]['status']}" zu "declined"');
+        // Status auf 'declined' setzen
         assignedUsers[userIndex]['status'] = 'declined';
-        
-        // Schicht aktualisieren
-        try {
-          await _firestore.collection('shifts').doc(shiftId).update({
-            'assignedUsers': assignedUsers,
-          });
-          
-          print('Schicht erfolgreich aktualisiert');
-          return true;
-        } catch (updateError) {
-          print('Fehler beim Aktualisieren der Schicht: $updateError');
-          return false;
-        }
       } else {
-        print('Fehler: Benutzer ${currentUser.uid} ist nicht in dieser Schicht zugewiesen');
-        
-        // Debug: alle Benutzer-IDs in der Schicht ausgeben
-        print('Alle zugewiesenen Benutzer:');
-        for (var user in assignedUsers) {
-          print('Zugewiesener Benutzer ID: ${user['userId']}, Name: ${user['userName']}');
-        }
-        
-        // Möglicherweise müssen wir eine neue Zuweisung hinzufügen?
-        print('Versuche, eine neue Zuweisung zu erstellen...');
+        print('Benutzer nicht gefunden. Füge neue Zuweisung hinzu.');
+        // Neuen Benutzer hinzufügen
         assignedUsers.add({
           'userId': currentUser.uid,
           'userName': currentUser.displayName ?? 'Unbekannter Benutzer',
           'status': 'declined',
         });
+      }
+      
+      // Schicht aktualisieren
+      try {
+        print('Aktualisiere Schicht $firestoreDocId mit ${assignedUsers.length} Zuweisungen');
+        print('Update-Daten: ${assignedUsers.toString()}');
         
-        try {
-          await _firestore.collection('shifts').doc(shiftId).update({
-            'assignedUsers': assignedUsers,
-          });
-          
-          print('Schicht erfolgreich mit neuer Benutzerzuweisung (abgelehnt) aktualisiert');
-          return true;
-        } catch (updateError) {
-          print('Fehler beim Aktualisieren der Schicht mit neuer Zuweisung: $updateError');
-          return false;
-        }
+        await _firestore.collection('shifts').doc(firestoreDocId).update({
+          'assignedUsers': assignedUsers,
+        });
+        
+        print('Schicht erfolgreich abgelehnt');
+        return true;
+      } catch (updateError) {
+        print('Fehler beim Aktualisieren der Schicht: $updateError');
+        return false;
       }
     } catch (e, stack) {
       print('Fehler beim Ablehnen der Schicht: $e');

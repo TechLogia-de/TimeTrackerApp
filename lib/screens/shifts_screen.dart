@@ -189,7 +189,7 @@ class ShiftsScreenState extends State<ShiftsScreen> with SingleTickerProviderSta
       appBar: AppBar(
         title: Row(
           children: [
-            const Text('Schichtplan').tr(),
+            const Text('Schichtplan'),
             if (pendingShifts > 0)
               Container(
                 margin: const EdgeInsets.only(left: 8),
@@ -250,15 +250,15 @@ class ShiftsScreenState extends State<ShiftsScreen> with SingleTickerProviderSta
                     ),
                 ],
               ),
-              text: 'Wochenplan'.tr(),
+              text: 'Wochenplan',
             ),
             Tab(
               icon: const Icon(Icons.calendar_month),
-              text: 'Monatsplan'.tr(),
+              text: 'Monatsplan',
             ),
             Tab(
               icon: const Icon(Icons.access_time),
-              text: 'Meine Verfügbarkeit'.tr(),
+              text: 'Meine Verfügbarkeit',
             ),
           ],
         ),
@@ -330,7 +330,7 @@ class ShiftsScreenState extends State<ShiftsScreen> with SingleTickerProviderSta
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'Keine Schichten in dieser Woche'.tr(),
+                      'Keine Schichten in dieser Woche',
                       style: TextStyle(
                         fontSize: 16,
                         color: Colors.grey[600],
@@ -404,7 +404,7 @@ class ShiftsScreenState extends State<ShiftsScreen> with SingleTickerProviderSta
         
         // Bestimme Farbe und Icons basierend auf Schichttyp und Status
         Color cardColor = Colors.grey.shade100;
-        Color statusColor = Colors.blue;
+        Color statusColor = Colors.green;
         IconData shiftIcon = Icons.access_time;
         
         // Setze Schicht-Icon basierend auf Titel
@@ -420,20 +420,20 @@ class ShiftsScreenState extends State<ShiftsScreen> with SingleTickerProviderSta
         if (userAssignment.userId.isNotEmpty) {
           switch (userAssignment.status) {
             case 'accepted':
-              cardColor = Colors.green.shade50;
-              statusColor = Colors.green;
-              break;
-            case 'declined':
               cardColor = Colors.red.shade50;
               statusColor = Colors.red;
+              break;
+            case 'declined':
+              cardColor = Colors.blue.shade50;
+              statusColor = Colors.blue;
               break;
             case 'pending':
               cardColor = Colors.amber.shade50;
               statusColor = Colors.amber;
               break;
             default:
-              cardColor = Colors.blue.shade50;
-              statusColor = Colors.blue;
+              cardColor = Colors.green.shade50;
+              statusColor = Colors.green;
           }
         }
         
@@ -551,7 +551,7 @@ class ShiftsScreenState extends State<ShiftsScreen> with SingleTickerProviderSta
                               color: user.status == 'accepted' ? Colors.green : 
                                     user.status == 'declined' ? Colors.red :
                                     user.status == 'pending' ? Colors.amber : 
-                                    Colors.blue,
+                                    Colors.green,
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
@@ -983,7 +983,8 @@ class ShiftsScreenState extends State<ShiftsScreen> with SingleTickerProviderSta
   }
   
   Widget _buildMonthlyView() {
-    final now = DateTime.now();
+    // Aktueller Monat und Jahr
+    DateTime currentMonth = DateTime.now();
     
     return Column(
       children: [
@@ -995,46 +996,440 @@ class ShiftsScreenState extends State<ShiftsScreen> with SingleTickerProviderSta
               IconButton(
                 icon: const Icon(Icons.arrow_back),
                 onPressed: () {
-                  // Vorheriger Monat anzeigen (später implementieren)
+                  setState(() {
+                    // Einen Monat zurück
+                    currentMonth = DateTime(currentMonth.year, currentMonth.month - 1);
+                    // Hier könnte man später Daten für den neuen Monat laden
+                  });
                 },
               ),
               Text(
-                DateFormat('MMMM yyyy', context.locale.languageCode).format(now),
+                DateFormat('MMMM yyyy', context.locale.languageCode).format(currentMonth),
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               IconButton(
                 icon: const Icon(Icons.arrow_forward),
                 onPressed: () {
-                  // Nächster Monat anzeigen (später implementieren)
+                  setState(() {
+                    // Einen Monat vor
+                    currentMonth = DateTime(currentMonth.year, currentMonth.month + 1);
+                    // Hier könnte man später Daten für den neuen Monat laden
+                  });
                 },
               ),
             ],
           ),
         ),
         Expanded(
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Platzhalter - später durch tatsächlichen Monatsplan ersetzen
-                Icon(
-                  Icons.calendar_month,
-                  size: 64,
-                  color: Colors.grey[400],
+          child: _buildMonthCalendar(currentMonth),
+        ),
+      ],
+    );
+  }
+  
+  Widget _buildMonthCalendar(DateTime month) {
+    // Startdatum des Monats
+    final firstDayOfMonth = DateTime(month.year, month.month, 1);
+    
+    // Endtag des Monats
+    final lastDayOfMonth = DateTime(month.year, month.month + 1, 0);
+    
+    // Wochentag des ersten Tags (0 = Montag, 6 = Sonntag in lokalem Format)
+    int firstWeekday = firstDayOfMonth.weekday - 1;
+    
+    // Anzahl der Tage im Monat
+    int daysInMonth = lastDayOfMonth.day;
+    
+    // Anzahl der Wochen im Monatskalender (inkl. angebrochene Wochen)
+    int weeksInMonth = ((daysInMonth + firstWeekday) / 7).ceil();
+    
+    // Filtere Schichten für diesen Monat
+    final shiftsForMonth = _shifts.where((shift) {
+      final shiftDate = DateTime.parse(shift.date);
+      return shiftDate.year == month.year && shiftDate.month == month.month;
+    }).toList();
+    
+    return Column(
+      children: [
+        // Wochentags-Header
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: Row(
+            children: List.generate(7, (index) {
+              // Wochentage: Mo, Di, Mi, Do, Fr, Sa, So
+              final weekdays = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+              return Expanded(
+                child: Container(
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade200,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    weekdays[index],
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 16),
-                Text(
-                  'Monatsplan wird noch implementiert'.tr(),
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey[600],
+              );
+            }),
+          ),
+        ),
+        const SizedBox(height: 8),
+        // Kalender-Grid
+        Expanded(
+          child: GridView.builder(
+            padding: const EdgeInsets.all(16),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 7,
+              childAspectRatio: 0.8,
+              crossAxisSpacing: 4,
+              mainAxisSpacing: 4,
+            ),
+            itemCount: weeksInMonth * 7,
+            itemBuilder: (context, index) {
+              // Kalkuliere Tag des Monats
+              int adjustedIndex = index - firstWeekday;
+              
+              // Prüfe, ob der Tag zum aktuellen Monat gehört
+              if (adjustedIndex < 0 || adjustedIndex >= daysInMonth) {
+                return Container(); // Leere Zelle für Tage außerhalb des Monats
+              }
+              
+              // Aktueller Tag
+              int dayOfMonth = adjustedIndex + 1;
+              DateTime currentDate = DateTime(month.year, month.month, dayOfMonth);
+              
+              // Finde Schichten für diesen Tag
+              final shiftsForDay = shiftsForMonth.where((shift) => 
+                DateTime.parse(shift.date).day == dayOfMonth
+              ).toList();
+              
+              // Prüfe, ob es zugewiesene oder angenommene Schichten gibt
+              bool hasAssignedShifts = shiftsForDay.any((shift) => 
+                shift.assignedUsers.any((user) => 
+                  user.userId == widget.user.uid && 
+                  (user.status == 'assigned' || user.status == 'pending')
+                )
+              );
+              
+              bool hasAcceptedShifts = shiftsForDay.any((shift) => 
+                shift.assignedUsers.any((user) => 
+                  user.userId == widget.user.uid && user.status == 'accepted'
+                )
+              );
+              
+              bool hasDeclinedShifts = shiftsForDay.any((shift) => 
+                shift.assignedUsers.any((user) => 
+                  user.userId == widget.user.uid && user.status == 'declined'
+                )
+              );
+              
+              // Hintergrundfarbe basierend auf Schichtstatus
+              Color backgroundColor = Colors.white;
+              if (hasAcceptedShifts) {
+                backgroundColor = Colors.red.shade50;
+              } else if (hasAssignedShifts) {
+                backgroundColor = Colors.amber.shade50;
+              } else if (hasDeclinedShifts) {
+                backgroundColor = Colors.blue.shade50;
+              }
+              
+              // Überprüfe, ob es der heutige Tag ist
+              bool isToday = DateTime.now().year == currentDate.year &&
+                            DateTime.now().month == currentDate.month &&
+                            DateTime.now().day == currentDate.day;
+              
+              return InkWell(
+                onTap: () {
+                  if (shiftsForDay.isNotEmpty) {
+                    _showDayDetailDialog(shiftsForDay, currentDate);
+                  }
+                },
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: backgroundColor,
+                    border: isToday 
+                      ? Border.all(color: Colors.green, width: 2)
+                      : Border.all(color: Colors.grey.shade300),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Column(
+                    children: [
+                      // Tag des Monats
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        decoration: BoxDecoration(
+                          color: isToday ? Colors.green : Colors.grey.shade100,
+                          borderRadius: const BorderRadius.only(
+                            topLeft: Radius.circular(3),
+                            topRight: Radius.circular(3),
+                          ),
+                        ),
+                        child: Text(
+                          '$dayOfMonth',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+                            color: isToday ? Colors.white : Colors.black,
+                          ),
+                        ),
+                      ),
+                      // Schicht-Indikatoren
+                      if (shiftsForDay.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        ...shiftsForDay.take(2).map((shift) {
+                          // Finde die Zuweisung für den aktuellen Benutzer
+                          final userAssignment = shift.assignedUsers.firstWhere(
+                            (a) => a.userId == widget.user.uid,
+                            orElse: () => ShiftAssignment(
+                              userId: '', 
+                              userName: '', 
+                              status: '',
+                            ),
+                          );
+                          
+                          // Farbe basierend auf Status
+                          Color statusColor = Colors.green;
+                          if (userAssignment.userId.isNotEmpty) {
+                            switch (userAssignment.status) {
+                              case 'accepted':
+                                statusColor = Colors.red;
+                                break;
+                              case 'declined':
+                                statusColor = Colors.blue;
+                                break;
+                              case 'pending':
+                                statusColor = Colors.amber;
+                                break;
+                            }
+                          }
+                          
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4, 
+                              vertical: 2,
+                            ),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4, 
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: statusColor,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                '${shift.startTime} ${shift.title}',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.white,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                        
+                        // Zeige "mehr" an, wenn es mehr als 2 Schichten gibt
+                        if (shiftsForDay.length > 2)
+                          Text(
+                            '+${shiftsForDay.length - 2} mehr',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                      ],
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        // Legende
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildLegendItem(Colors.amber, 'Ausstehend'),
+              const SizedBox(width: 16),
+              _buildLegendItem(Colors.red, 'Akzeptiert'),
+              const SizedBox(width: 16),
+              _buildLegendItem(Colors.blue, 'Abgelehnt'),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+  
+  Widget _buildLegendItem(Color color, String label) {
+    return Row(
+      children: [
+        Container(
+          width: 16,
+          height: 16,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(label, style: const TextStyle(fontSize: 12)),
+      ],
+    );
+  }
+  
+  void _showDayDetailDialog(List<Shift> shiftsForDay, DateTime date) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          DateFormat('EEEE, d. MMMM', context.locale.languageCode).format(date),
+          style: const TextStyle(fontSize: 18),
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: shiftsForDay.length,
+            itemBuilder: (context, index) {
+              final shift = shiftsForDay[index];
+              
+              // Finde die Zuweisung für den aktuellen Benutzer
+              final userAssignment = shift.assignedUsers.firstWhere(
+                (a) => a.userId == widget.user.uid,
+                orElse: () => ShiftAssignment(
+                  userId: '', 
+                  userName: '', 
+                  status: '',
+                ),
+              );
+              
+              // Bestimme Farbe basierend auf Status
+              Color statusColor = Colors.green;
+              String statusText = 'Zugewiesen';
+              
+              if (userAssignment.userId.isNotEmpty) {
+                switch (userAssignment.status) {
+                  case 'accepted':
+                    statusColor = Colors.red;
+                    statusText = 'Akzeptiert';
+                    break;
+                  case 'declined':
+                    statusColor = Colors.blue;
+                    statusText = 'Abgelehnt';
+                    break;
+                  case 'pending':
+                    statusColor = Colors.amber;
+                    statusText = 'Ausstehend';
+                    break;
+                }
+              }
+              
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  title: Text(
+                    shift.title,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: Text('${shift.startTime} - ${shift.endTime}'),
+                  trailing: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8, 
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: statusColor,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      statusText,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    if (userAssignment.userId.isNotEmpty && 
+                        (userAssignment.status == 'pending' || userAssignment.status == 'assigned')) {
+                      _showShiftApprovalDialog(shift);
+                    }
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+        actions: [
+          if (shiftsForDay.any((shift) => 
+              shift.assignedUsers.any((user) => 
+                user.userId == widget.user.uid && 
+                (user.status == 'pending' || user.status == 'assigned')
+              )
+            )) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    // Finde die erste ausstehende Schicht für diesen Tag
+                    final pendingShift = shiftsForDay.firstWhere(
+                      (shift) => shift.assignedUsers.any((user) => 
+                        user.userId == widget.user.uid && 
+                        (user.status == 'pending' || user.status == 'assigned')
+                      )
+                    );
+                    _acceptShift(pendingShift.id);
+                  },
+                  icon: const Icon(Icons.check_circle, color: Colors.white),
+                  label: const Text('Alle akzeptieren'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    // Finde die erste ausstehende Schicht für diesen Tag
+                    final pendingShift = shiftsForDay.firstWhere(
+                      (shift) => shift.assignedUsers.any((user) => 
+                        user.userId == widget.user.uid && 
+                        (user.status == 'pending' || user.status == 'assigned')
+                      )
+                    );
+                    _declineShift(pendingShift.id);
+                  },
+                  icon: const Icon(Icons.cancel, color: Colors.white),
+                  label: const Text('Alle ablehnen'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
                   ),
                 ),
               ],
             ),
+            const SizedBox(height: 8),
+          ],
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Schließen'),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
   
@@ -1050,7 +1445,7 @@ class ShiftsScreenState extends State<ShiftsScreen> with SingleTickerProviderSta
           ),
           const SizedBox(height: 16),
           Text(
-            'Verfügbarkeitseinstellungen werden noch implementiert'.tr(),
+            'Verfügbarkeitseinstellungen werden noch implementiert',
             style: TextStyle(
               fontSize: 16,
               color: Colors.grey[600],
@@ -1061,7 +1456,7 @@ class ShiftsScreenState extends State<ShiftsScreen> with SingleTickerProviderSta
             onPressed: () {
               // Verfügbarkeiten bearbeiten (später implementieren)
             },
-            child: const Text('Verfügbarkeit bearbeiten').tr(),
+            child: const Text('Verfügbarkeit bearbeiten'),
           ),
         ],
       ),

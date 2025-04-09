@@ -97,12 +97,27 @@ class TimeScreenState extends State<TimeScreen> with AutomaticKeepAliveClientMix
 
   @override
   void dispose() {
-    _stopTimer(cancel: true);
-    _pauseTimerInstance?.cancel();
+    // Timer-Instanzen sauber stoppen
+    if (_timer != null) {
+      _timer!.cancel();
+      _timer = null;
+    }
+    
+    if (_pauseTimerInstance != null) {
+      _pauseTimerInstance!.cancel();
+      _pauseTimerInstance = null;
+    }
+    
+    // Sicherstellen, dass keine laufenden Timer weiterlaufen
+    _isRunning = false;
+    _isPaused = false;
+    
+    // Controller und Listener ordnungsgemäß entfernen
     _noteController.dispose();
     _tabController.dispose();
     _entriesScrollController.removeListener(_scrollListener);
     _entriesScrollController.dispose();
+    
     super.dispose();
   }
 
@@ -148,70 +163,72 @@ class TimeScreenState extends State<TimeScreen> with AutomaticKeepAliveClientMix
       // Aktiven Timer prüfen
       final activeTimer = await _timeEntryService.getActiveTimerForUser(widget.user.uid);
       
-      if (mounted) {
-        setState(() {
-          _customers = customers;
-          _projects = projects;
-          _timeEntries = timeEntries;
+      if (!mounted) return;
+      
+      setState(() {
+        _customers = customers;
+        _projects = projects;
+        _timeEntries = timeEntries;
+        
+        // Timer-Status aus aktivem Timer setzen
+        if (activeTimer != null) {
+          _activeTimer = activeTimer;
+          _isRunning = true;
+          _isPaused = activeTimer.status == 'paused';
+          _selectedCustomerId = activeTimer.customerId;
+          _selectedProjectId = activeTimer.projectId;
+          _note = activeTimer.note;
+          _noteController.text = activeTimer.note;
+          _pauseMinutes = activeTimer.pauseMinutes;
+          _startTime = activeTimer.startTime;
           
-          // Timer-Status aus aktivem Timer setzen
-          if (activeTimer != null) {
-            _activeTimer = activeTimer;
-            _isRunning = true;
-            _isPaused = activeTimer.status == 'paused';
-            _selectedCustomerId = activeTimer.customerId;
-            _selectedProjectId = activeTimer.projectId;
-            _note = activeTimer.note;
-            _noteController.text = activeTimer.note;
-            _pauseMinutes = activeTimer.pauseMinutes;
-            _startTime = activeTimer.startTime;
+          // Projekte filtern
+          _filteredProjects = _projects.where((p) => p.customerId == _selectedCustomerId).toList();
+          
+          // Verstrichene Zeit berechnen
+          if (!_isPaused) {
+            // Bei laufendem Timer die vergangene Zeit berechnen
+            final now = DateTime.now();
+            _elapsedSeconds = now.difference(_startTime!).inSeconds;
             
-            // Projekte filtern
-            _filteredProjects = _projects.where((p) => p.customerId == _selectedCustomerId).toList();
+            // Stoppe zuerst vorhandene Timer, falls sie laufen
+            _timer?.cancel();
+            _timer = null;
             
-            // Verstrichene Zeit berechnen
-            if (!_isPaused) {
-              // Bei laufendem Timer die vergangene Zeit berechnen
-              final now = DateTime.now();
-              _elapsedSeconds = now.difference(_startTime!).inSeconds;
-              
-              // Stoppe zuerst vorhandene Timer, falls sie laufen
-              _timer?.cancel();
-              _timer = null;
-              
-              // Starte den Timer neu
-              _startTimer(false); // false = kein neuer Timer in Firestore
-            } else {
-              // Bei pausiertem Timer verwenden wir die gespeicherte Dauer
-              _elapsedSeconds = activeTimer.duration;
-              
-              // Pausentimer starten
-              _pauseTimerInstance?.cancel();
-              _pauseTimerInstance = null;
-              
-              _pauseStartTime = DateTime.now().subtract(const Duration(minutes: 1));
-              _currentPauseSeconds = 60; // Starte mit 1 Minute vergangene Pausenzeit
-              
-              // Starte Pausentimer
-              _pauseTimerInstance = Timer.periodic(const Duration(seconds: 1), (timer) {
-                if (mounted) {
-                  setState(() {
-                    _currentPauseSeconds++;
-                  });
-                }
+            // Starte den Timer neu
+            _startTimer(false); // false = kein neuer Timer in Firestore
+          } else {
+            // Bei pausiertem Timer verwenden wir die gespeicherte Dauer
+            _elapsedSeconds = activeTimer.duration;
+            
+            // Pausentimer starten
+            _pauseTimerInstance?.cancel();
+            _pauseTimerInstance = null;
+            
+            _pauseStartTime = DateTime.now().subtract(const Duration(minutes: 1));
+            _currentPauseSeconds = 60; // Starte mit 1 Minute vergangene Pausenzeit
+            
+            // Starte Pausentimer
+            _pauseTimerInstance = Timer.periodic(const Duration(seconds: 1), (timer) {
+              if (!mounted) {
+                timer.cancel();
+                return;
+              }
+              setState(() {
+                _currentPauseSeconds++;
               });
-            }
-
-            // Benachrichtige Parent über Timer-Änderung
-            if (widget.onTimerStateChanged != null) {
-              widget.onTimerStateChanged!(activeTimer);
-            }
+            });
           }
-          
-          _isLoading = false;
-          _isLoadingEntries = false;
-        });
-      }
+
+          // Benachrichtige Parent über Timer-Änderung
+          if (widget.onTimerStateChanged != null) {
+            widget.onTimerStateChanged!(activeTimer);
+          }
+        }
+        
+        _isLoading = false;
+        _isLoadingEntries = false;
+      });
     } catch (e) {
       print('Fehler beim Laden der Daten: $e');
       if (mounted) {
@@ -234,6 +251,8 @@ class TimeScreenState extends State<TimeScreen> with AutomaticKeepAliveClientMix
   void _startTimer([bool saveToFirestore = true]) {
     if (_isRunning) return;
     
+    if (!mounted) return;
+    
     setState(() {
       _isRunning = true;
       _isPaused = false;
@@ -241,11 +260,13 @@ class TimeScreenState extends State<TimeScreen> with AutomaticKeepAliveClientMix
     });
     
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) {
-        setState(() {
-          _elapsedSeconds++;
-        });
+      if (!mounted) {
+        timer.cancel();
+        return;
       }
+      setState(() {
+        _elapsedSeconds++;
+      });
     });
     
     if (saveToFirestore) {
@@ -321,6 +342,8 @@ class TimeScreenState extends State<TimeScreen> with AutomaticKeepAliveClientMix
     
     final now = DateTime.now();
     
+    if (!mounted) return;
+    
     setState(() {
       _isPaused = true;
       _pauseStartTime = now;
@@ -329,11 +352,13 @@ class TimeScreenState extends State<TimeScreen> with AutomaticKeepAliveClientMix
     
     // Starte den Pausentimer
     _pauseTimerInstance = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) {
-        setState(() {
-          _currentPauseSeconds++;
-        });
+      if (!mounted) {
+        timer.cancel();
+        return;
       }
+      setState(() {
+        _currentPauseSeconds++;
+      });
     });
     
     _updateTimerStatus(true, now);
@@ -376,11 +401,13 @@ class TimeScreenState extends State<TimeScreen> with AutomaticKeepAliveClientMix
     });
     
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) {
-        setState(() {
-          _elapsedSeconds++;
-        });
+      if (!mounted) {
+        timer.cancel();
+        return;
       }
+      setState(() {
+        _elapsedSeconds++;
+      });
     });
     
     _updateTimerStatus(false, now);
@@ -464,6 +491,8 @@ class TimeScreenState extends State<TimeScreen> with AutomaticKeepAliveClientMix
       _saveEndedTimer();
     }
     
+    if (!mounted) return;
+    
     setState(() {
       _isRunning = false;
       _isPaused = false;
@@ -540,6 +569,8 @@ class TimeScreenState extends State<TimeScreen> with AutomaticKeepAliveClientMix
   
   // Zeiteinträge neu laden
   Future<void> _loadTimeEntries() async {
+    if (!mounted) return;
+    
     setState(() {
       _isLoadingEntries = true;
     });
@@ -569,6 +600,8 @@ class TimeScreenState extends State<TimeScreen> with AutomaticKeepAliveClientMix
   // Mehr Zeiteinträge laden (Paginierung)
   Future<void> _loadMoreTimeEntries() async {
     if (_isLoadingMoreEntries || !_hasMoreEntries) return;
+    
+    if (!mounted) return;
     
     setState(() {
       _isLoadingMoreEntries = true;
@@ -2284,10 +2317,6 @@ class TimeScreenState extends State<TimeScreen> with AutomaticKeepAliveClientMix
       statusColor = Colors.green;
       statusText = 'Genehmigt';
       statusIcon = Icons.check_circle_outline;
-    } else if (isDraft) {
-      statusColor = Colors.blue;
-      statusText = 'Entwurf';
-      statusIcon = Icons.edit_note;
     } else if (entry.status == 'running') {
       statusColor = Colors.blue;
       statusText = 'Läuft';
